@@ -129,124 +129,9 @@ void GPUHistBuilder::BuildHist(int depth) {
   dh::safe_cuda(cudaDeviceSynchronize());
 }
 
+
 template <int BLOCK_THREADS>
 __global__ void find_split_kernel(
-    const gpu_gpair* d_level_hist, int* d_feature_segments, int depth,
-    int n_features, int n_bins, Node* d_nodes, float* d_fidx_min_map,
-    float* d_gidx_fvalue_map, GPUTrainingParam gpu_param,
-    bool* d_left_child_smallest, bool colsample, int* d_feature_flags) {
-  typedef cub::KeyValuePair<int, float> ArgMaxT;
-  typedef cub::BlockScan<gpu_gpair, BLOCK_THREADS, cub::BLOCK_SCAN_WARP_SCANS>
-      BlockScanT;
-  typedef cub::BlockReduce<ArgMaxT, BLOCK_THREADS> MaxReduceT;
-  typedef cub::BlockReduce<gpu_gpair, BLOCK_THREADS> SumReduceT;
-
-  union TempStorage {
-    typename BlockScanT::TempStorage scan;
-    typename MaxReduceT::TempStorage max_reduce;
-    typename SumReduceT::TempStorage sum_reduce;
-  };
-
-  struct UninitializedSplit : cub::Uninitialized<Split> {};
-  struct UninitializedGpair : cub::Uninitialized<gpu_gpair> {};
-
-  __shared__ UninitializedSplit uninitialized_split;
-  Split& split = uninitialized_split.Alias();
-  __shared__ ArgMaxT block_max;
-  __shared__ TempStorage temp_storage;
-
-  if (threadIdx.x == 0) {
-    split = Split();
-  }
-
-  __syncthreads();
-
-  int node_idx = n_nodes(depth - 1) + blockIdx.x;
-
-  for (int fidx = 0; fidx < n_features; fidx++) {
-    if (colsample && d_feature_flags[fidx] == 0) continue;
-
-    int begin = d_feature_segments[blockIdx.x * n_features + fidx];
-    int end = d_feature_segments[blockIdx.x * n_features + fidx + 1];
-    int gidx = (begin - (blockIdx.x * n_bins)) + threadIdx.x;
-    bool thread_active = threadIdx.x < end - begin;
-
-    // Scan histogram
-    gpu_gpair bin =
-        thread_active ? d_level_hist[begin + threadIdx.x] : gpu_gpair();
-
-    gpu_gpair feature_sum;
-    BlockScanT(temp_storage.scan)
-        .ExclusiveScan(bin, bin, gpu_gpair(), cub::Sum(), feature_sum);
-
-    // Calculate gain
-    gpu_gpair parent_sum = d_nodes[node_idx].sum_gradients;
-    float parent_gain = d_nodes[node_idx].root_gain;
-
-    gpu_gpair missing = parent_sum - feature_sum;
-
-    bool missing_left;
-    float gain = thread_active
-                     ? loss_chg_missing(bin, missing, parent_sum, parent_gain,
-                                        gpu_param, missing_left)
-                     : -FLT_MAX;
-    __syncthreads();
-
-    // Find thread with best gain
-    ArgMaxT tuple(threadIdx.x, gain);
-    ArgMaxT best = MaxReduceT(temp_storage.max_reduce)
-                       .Reduce(tuple, cub::ArgMax(), end - begin);
-
-    if (threadIdx.x == 0) {
-      block_max = best;
-    }
-
-    __syncthreads();
-
-    // Best thread updates split
-    if (threadIdx.x == block_max.key) {
-      float fvalue;
-      if (threadIdx.x == 0) {
-        fvalue = d_fidx_min_map[fidx];
-      } else {
-        fvalue = d_gidx_fvalue_map[gidx - 1];
-      }
-
-      gpu_gpair left = missing_left ? bin + missing : bin;
-      gpu_gpair right = parent_sum - left;
-
-      split.Update(gain, missing_left, fvalue, fidx, left, right, gpu_param);
-    }
-    __syncthreads();
-  }
-
-  // Create node
-  if (threadIdx.x == 0) {
-    d_nodes[node_idx].split = split;
-    if (depth == 0) {
-      // split.Print();
-    }
-
-    d_nodes[left_child_nidx(node_idx)] = Node(
-        split.left_sum,
-        CalcGain(gpu_param, split.left_sum.grad(), split.left_sum.hess()),
-        CalcWeight(gpu_param, split.left_sum.grad(), split.left_sum.hess()));
-
-    d_nodes[right_child_nidx(node_idx)] = Node(
-        split.right_sum,
-        CalcGain(gpu_param, split.right_sum.grad(), split.right_sum.hess()),
-        CalcWeight(gpu_param, split.right_sum.grad(), split.right_sum.hess()));
-
-    // Record smallest node
-    if (split.left_sum.hess() <= split.right_sum.hess()) {
-      d_left_child_smallest[node_idx] = true;
-    } else {
-      d_left_child_smallest[node_idx] = false;
-    }
-  }
-}
-template <int BLOCK_THREADS>
-__global__ void find_split_general_kernel(
     const gpu_gpair* d_level_hist, int* d_feature_segments, int depth,
     int n_features, int n_bins, Node* d_nodes, float* d_fidx_min_map,
     float* d_gidx_fvalue_map, GPUTrainingParam gpu_param,
@@ -397,7 +282,7 @@ void GPUHistBuilder::FindSplitSpecialize<MAX_BLOCK_THREADS>(int depth) {
   bool colsample =
       param.colsample_bylevel < 1.0 || param.colsample_bytree < 1.0;
 
-  find_split_general_kernel<
+  find_split_kernel<
       MAX_BLOCK_THREADS><<<GRID_SIZE, MAX_BLOCK_THREADS>>>(
       hist.GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
       hmat_.row_ptr.back(), nodes.data(), fidx_min_map.data(),
@@ -413,7 +298,7 @@ void GPUHistBuilder::FindSplitSpecialize(int depth) {
     bool colsample =
         param.colsample_bylevel < 1.0 || param.colsample_bytree < 1.0;
 
-    find_split_general_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>(
+    find_split_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>(
         hist.GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
         hmat_.row_ptr.back(), nodes.data(), fidx_min_map.data(),
         gidx_fvalue_map.data(), gpu_param, left_child_smallest.data(),
