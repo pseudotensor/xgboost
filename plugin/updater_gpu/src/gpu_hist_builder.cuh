@@ -11,13 +11,17 @@
 #include "device_helpers.cuh"
 #include "types.cuh"
 
+//#define WHICHDEVICE DEVICE // choose which memory type to use (DEVICE or DEVICE_MANAGE)D
+#define WHICHDEVICE DEVICE_MANAGED // choose which memory type to use (DEVICE or DEVICE_MANAGED)
+
 namespace xgboost {
 
 namespace tree {
 
+  
 struct DeviceGMat {
-  dh::dvec<int> gidx;
-  dh::dvec<int> ridx;
+  dh::dvec<int,dh::memory_type::WHICHDEVICE> gidx;
+  dh::dvec<int,dh::memory_type::WHICHDEVICE> ridx;
   void Init(const common::GHistIndexMatrix &gmat);
 };
 
@@ -31,7 +35,7 @@ struct HistBuilder {
 
 struct DeviceHist {
   int n_bins;
-  dh::dvec<gpu_gpair> hist;
+  dh::dvec<gpu_gpair,dh::memory_type::WHICHDEVICE> hist;
 
   void Init(int max_depth);
 
@@ -83,25 +87,25 @@ class GPUHistBuilder {
   DeviceGMat device_matrix;
   const DMatrix *p_last_fmat_;
 
-  dh::bulk_allocator ba;
+  dh::bulk_allocator<dh::memory_type::WHICHDEVICE> ba;
   dh::CubMemory cub_mem;
-  dh::dvec<int> gidx_feature_map;
-  dh::dvec<int> hist_node_segments;
-  dh::dvec<int> feature_segments;
-  dh::dvec<float> gain;
-  dh::dvec<NodeIdT> position;
-  dh::dvec<NodeIdT> position_tmp;
-  dh::dvec<float> gidx_fvalue_map;
-  dh::dvec<float> fidx_min_map;
+  dh::dvec<int,dh::memory_type::WHICHDEVICE> gidx_feature_map;
+  dh::dvec<int,dh::memory_type::WHICHDEVICE> hist_node_segments;
+  dh::dvec<int,dh::memory_type::WHICHDEVICE> feature_segments;
+  dh::dvec<float,dh::memory_type::WHICHDEVICE> gain;
+  dh::dvec<NodeIdT,dh::memory_type::WHICHDEVICE> position;
+  dh::dvec<NodeIdT,dh::memory_type::WHICHDEVICE> position_tmp;
+  dh::dvec<float,dh::memory_type::WHICHDEVICE> gidx_fvalue_map;
+  dh::dvec<float,dh::memory_type::WHICHDEVICE> fidx_min_map;
   DeviceHist hist;
-  dh::dvec<cub::KeyValuePair<int, float>> argmax;
-  dh::dvec<gpu_gpair> node_sums;
-  dh::dvec<gpu_gpair> hist_scan;
-  dh::dvec<gpu_gpair> device_gpair;
-  dh::dvec<Node> nodes;
-  dh::dvec<int> feature_flags;
-  dh::dvec<bool> left_child_smallest;
-  dh::dvec<bst_float> prediction_cache;
+  dh::dvec<cub::KeyValuePair<int, float>,dh::memory_type::WHICHDEVICE> argmax;
+  dh::dvec<gpu_gpair,dh::memory_type::WHICHDEVICE> node_sums;
+  dh::dvec<gpu_gpair,dh::memory_type::WHICHDEVICE> hist_scan;
+  dh::dvec<gpu_gpair,dh::memory_type::WHICHDEVICE> device_gpair;
+  dh::dvec<Node,dh::memory_type::WHICHDEVICE> nodes;
+  dh::dvec<int,dh::memory_type::WHICHDEVICE> feature_flags;
+  dh::dvec<bool,dh::memory_type::WHICHDEVICE> left_child_smallest;
+  dh::dvec<bst_float,dh::memory_type::WHICHDEVICE> prediction_cache;
   bool prediction_cache_initialised;
 
   std::vector<int> feature_set_tree;
