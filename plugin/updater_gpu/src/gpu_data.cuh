@@ -25,29 +25,29 @@ struct GPUData {
   //dh::bulk_allocator<int> ba;
   GPUTrainingParam param;
 
-  dh::dvec<float,dh::memory_type::DEVICE> fvalues;
-  dh::dvec<float,dh::memory_type::DEVICE> fvalues_temp;
-  dh::dvec<float,dh::memory_type::DEVICE> fvalues_cached;
-  dh::dvec<int,dh::memory_type::DEVICE> foffsets;
-  dh::dvec<bst_uint,dh::memory_type::DEVICE> instance_id;
-  dh::dvec<bst_uint,dh::memory_type::DEVICE> instance_id_temp;
-  dh::dvec<bst_uint,dh::memory_type::DEVICE> instance_id_cached;
-  dh::dvec<int,dh::memory_type::DEVICE> feature_id;
-  dh::dvec<NodeIdT,dh::memory_type::DEVICE> node_id;
-  dh::dvec<NodeIdT,dh::memory_type::DEVICE> node_id_temp;
-  dh::dvec<NodeIdT,dh::memory_type::DEVICE> node_id_instance;
-  dh::dvec<gpu_gpair,dh::memory_type::DEVICE> gpair;
-  dh::dvec<Node,dh::memory_type::DEVICE> nodes;
-  dh::dvec<Split,dh::memory_type::DEVICE> split_candidates;
-  dh::dvec<gpu_gpair,dh::memory_type::DEVICE> node_sums;
-  dh::dvec<int,dh::memory_type::DEVICE> node_offsets;
-  dh::dvec<int,dh::memory_type::DEVICE> sort_index_in;
-  dh::dvec<int,dh::memory_type::DEVICE> sort_index_out;
+  dh::dvec<float> fvalues;
+  dh::dvec<float> fvalues_temp;
+  dh::dvec<float> fvalues_cached;
+  dh::dvec<int> foffsets;
+  dh::dvec<bst_uint> instance_id;
+  dh::dvec<bst_uint> instance_id_temp;
+  dh::dvec<bst_uint> instance_id_cached;
+  dh::dvec<int> feature_id;
+  dh::dvec<NodeIdT> node_id;
+  dh::dvec<NodeIdT> node_id_temp;
+  dh::dvec<NodeIdT> node_id_instance;
+  dh::dvec<gpu_gpair> gpair;
+  dh::dvec<Node> nodes;
+  dh::dvec<Split> split_candidates;
+  dh::dvec<gpu_gpair> node_sums;
+  dh::dvec<int> node_offsets;
+  dh::dvec<int> sort_index_in;
+  dh::dvec<int> sort_index_out;
 
-  dh::dvec<char,dh::memory_type::DEVICE> cub_mem;
+  dh::dvec<char> cub_mem;
 
-  dh::dvec<int,dh::memory_type::DEVICE> feature_flags;
-  dh::dvec<int,dh::memory_type::DEVICE> feature_set;
+  dh::dvec<int> feature_flags;
+  dh::dvec<int> feature_set;
 
   ItemIter items_iter;
 

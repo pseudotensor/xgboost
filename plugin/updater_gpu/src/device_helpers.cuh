@@ -235,14 +235,15 @@ __device__ void block_fill(IterT begin, size_t n, ValueT value) {
   template <memory_type MemoryT>
 class bulk_allocator;
 
-  template <typename T, memory_type MemoryT>
+  template <typename T>
 class dvec {
-    friend bulk_allocator<MemoryT>;
 
  private:
   T *_ptr;
   size_t _size;
 
+
+ public:
   void external_allocate(void *ptr, size_t size) {
     if (!empty()) {
       throw std::runtime_error("Tried to allocate dvec but already allocated");
@@ -252,7 +253,6 @@ class dvec {
     _size = size;
   }
 
- public:
   dvec() : _ptr(NULL), _size(0) {}
   size_t size() const { return _size; }
   bool empty() const { return _ptr == NULL || _size == 0; }
@@ -297,7 +297,7 @@ class dvec {
     return *this;
   }
 
-    dvec &operator=(dvec<T,MemoryT> &other) {
+    dvec &operator=(dvec<T> &other) {
     if (other.size() != size()) {
       throw std::runtime_error(
           "Cannot copy assign dvec to dvec, sizes are different");
@@ -328,22 +328,22 @@ class bulk_allocator {
   }
 
   template <typename T, typename SizeT>
-  size_t get_size_bytes(dvec<T,MemoryT> *first_vec, SizeT first_size) {
+  size_t get_size_bytes(dvec<T> *first_vec, SizeT first_size) {
     return align_round_up(first_size * sizeof(T));
   }
 
   template <typename T, typename SizeT, typename... Args>
-  size_t get_size_bytes(dvec<T,MemoryT> *first_vec, SizeT first_size, Args... args) {
+  size_t get_size_bytes(dvec<T> *first_vec, SizeT first_size, Args... args) {
     return align_round_up(first_size * sizeof(T)) + get_size_bytes(args...);
   }
 
   template <typename T, typename SizeT>
-  void allocate_dvec(char *ptr, dvec<T,MemoryT> *first_vec, SizeT first_size) {
+  void allocate_dvec(char *ptr, dvec<T> *first_vec, SizeT first_size) {
     first_vec->external_allocate(static_cast<void *>(ptr), first_size);
   }
 
   template <typename T, typename SizeT, typename... Args>
-  void allocate_dvec(char *ptr, dvec<T,MemoryT> *first_vec, SizeT first_size,
+  void allocate_dvec(char *ptr, dvec<T> *first_vec, SizeT first_size,
                      Args... args) {
     first_vec->external_allocate(static_cast<void *>(ptr), first_size);
     ptr += align_round_up(first_size * sizeof(T));
@@ -441,7 +441,7 @@ void print(const thrust::device_vector<T> &v, size_t max_items = 10) {
 }
 
   template <typename T, memory_type MemoryT>
-  void print(const dvec<T,MemoryT> &v, size_t max_items = 10) {
+  void print(const dvec<T> &v, size_t max_items = 10) {
   std::vector<T> h = v.as_vector();
   for (int i = 0; i < std::min(max_items, h.size()); i++) {
     std::cout << " " << h[i];

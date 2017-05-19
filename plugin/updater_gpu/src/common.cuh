@@ -142,13 +142,12 @@ inline void dense2sparse_tree(RegTree* p_tree,
 }
 
 // Set gradient pair to 0 with p = 1 - subsample
-  template <dh::memory_type MemoryT>
-  inline void subsample_gpair(dh::dvec<gpu_gpair,MemoryT>* p_gpair, float subsample) {
+  inline void subsample_gpair(dh::dvec<gpu_gpair>* p_gpair, float subsample) {
   if (subsample == 1.0) {
     return;
   }
 
-  dh::dvec<gpu_gpair,MemoryT>& gpair = *p_gpair;
+  dh::dvec<gpu_gpair>& gpair = *p_gpair;
 
   auto d_gpair = gpair.data();
   dh::BernoulliRng rng(subsample, common::GlobalRandom()());
