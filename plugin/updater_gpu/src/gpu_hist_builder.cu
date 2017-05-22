@@ -80,6 +80,9 @@ void GPUHistBuilder::Init(const TrainParam& param) {
   if (!param.silent) {
     LOG(CONSOLE) << "Device: [" << param.gpu_id << "] " << dh::device_name();
   }
+
+  CHECK_LE(param.n_gpus,n_devices()) << "Specify number of GPUs to be less or equal to number of visible GPU devices."
+
 }
 
 void GPUHistBuilder::BuildHist(int depth) {
@@ -90,7 +93,7 @@ void GPUHistBuilder::BuildHist(int depth) {
   auto hist_builder = hist.GetBuilder();
   auto d_left_child_smallest = left_child_smallest.data();
 
-  dh::launch_n(device_matrix.gidx.size(), [=] __device__(int idx) {
+  dh::multi_launch_n(device_matrix.gidx.size(), [=] __device__(int idx, int device_idx) {
     int ridx = d_ridx[idx];
     int pos = d_position[ridx];
     if (!is_active(pos, depth)) return;
@@ -107,7 +110,8 @@ void GPUHistBuilder::BuildHist(int depth) {
     hist_builder.Add(gpair, gidx, pos);
   });
 
-  dh::safe_cuda(cudaDeviceSynchronize());
+  //  dh::safe_cuda(cudaDeviceSynchronize());
+ dh:synchronize_all();
 
   // Subtraction trick
   int n_sub_bins = (n_nodes_level(depth) / 2) * hist_builder.n_bins;

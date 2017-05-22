@@ -421,6 +421,22 @@ inline size_t available_memory() {
   return device_free;
 }
 
+
+inline int n_visible_devices() {
+  int n_visgpus = 0;
+ 
+  cudaGetDeviceCount(&n_visgpus));
+
+  return n_visgpus;
+}
+
+inline void synchronize_all() {
+  for(int device_idx=0;device_idx<n_devices;device_idx++){
+    safe_cuda(cudaSetDevice(device_idx));
+    safe_cuda(cudaDeviceSynchronize());
+  }
+}
+
 inline std::string device_name() {
   cudaDeviceProp prop;
   dh::safe_cuda(cudaGetDeviceProperties(&prop, 0));
@@ -490,9 +506,15 @@ size_t size_bytes(const thrust::device_vector<T> &v) {
  */
 
 template <typename L>
-__global__ void launch_n_kernel(size_t n, L lambda) {
-  for (auto i : grid_stride_range(static_cast<size_t>(0), n)) {
+__global__ void launch_n_kernel(size_t begin, size_t end, L lambda) {
+  for (auto i : grid_stride_range(begin, end)) {
     lambda(i);
+  }
+}
+template <typename L>
+__global__ void launch_n_kernel(int device_idx, size_t begin, size_t end, L lambda) {
+  for (auto i : grid_stride_range(begin, end)) {
+    lambda(i,device_idx);
   }
 }
 
@@ -500,7 +522,26 @@ template <int ITEMS_PER_THREAD = 8, int BLOCK_THREADS = 256, typename L>
 inline void launch_n(size_t n, L lambda) {
   const int GRID_SIZE = div_round_up(n, ITEMS_PER_THREAD * BLOCK_THREADS);
 #if defined(__CUDACC__)
-  launch_n_kernel<<<GRID_SIZE, BLOCK_THREADS>>>(n, lambda);
+  launch_n_kernel<<<GRID_SIZE, BLOCK_THREADS>>>(static_cast<size_t>(0),n, lambda);
+#endif
+}
+
+template <int ITEMS_PER_THREAD = 8, int BLOCK_THREADS = 256, typename L>
+inline void multi_launch_n(size_t n, int n_devices, L lambda) {
+  CHECK_LE(n_devices,n_visible_devices()) << "Number of devices requested needs to be less than equal to number of visible devices.";
+  const int GRID_SIZE = div_round_up(n, ITEMS_PER_THREAD * BLOCK_THREADS);
+#if defined(__CUDACC__)
+  if(n<n_devices){
+    launch_n_kernel<<<GRID_SIZE, BLOCK_THREADS>>>(static_cast<size_t>(0),n, lambda);
+  }
+  else{
+    for(int device_idx=0;device_idx<n_devices;device_idx++){
+      safe_cuda(cudaSetDevice(device_idx));
+      size_t begin=(n/n_devices)*device_idx;
+      size_t end=std::max((n/n_devices)*(device_idx+1),n);
+      launch_n_kernel<<<GRID_SIZE, BLOCK_THREADS>>>(device_idx,begin, end, lambda);
+    }
+  }
 #endif
 }
 
