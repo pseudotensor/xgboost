@@ -190,9 +190,10 @@ class TreeModel {
     }
   };
 
- protected:
+ public:
   // vector of nodes
   std::vector<Node> nodes;
+ protected:
   // free node space, used during training process
   std::vector<int>  deleted_nodes;
   // stats of nodes

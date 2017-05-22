@@ -587,6 +587,7 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
     this->UpdatePosition(depth);
   }
   dense2sparse_tree(p_tree, nodes.tbegin(), nodes.tend(), param);
+  fprintf(stderr,"total=%d active=%d\n",n_nodes(param.max_depth),p_tree->nodes.size());
 }
 }  // namespace tree
 }  // namespace xgboost

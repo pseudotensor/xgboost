@@ -5,8 +5,6 @@ import numpy as np
 from sklearn.datasets import make_classification
 import time
 
-n = 1000000
-num_rounds = 500
 
 def run_benchmark(args, gpu_algorithm, cpu_algorithm):
     print("Generating dataset: {} rows * {} columns".format(args.rows,args.columns))
@@ -15,21 +13,25 @@ def run_benchmark(args, gpu_algorithm, cpu_algorithm):
 
     param = {'objective': 'binary:logistic',
              'tree_method': 'exact',
-             'max_depth': 6,
-             'silent': 1,
+             'max_depth': 12,
+             'max_bin': 256,
+#             'min_child_weight': 100,
+             'silent': 0,
              'eval_metric': 'auc'}
 
-    param['updater'] = gpu_algorithm
-    print("Training with '%s'" % param['updater'])
-    tmp = time.time()
-    xgb.train(param, dtrain, args.iterations)
-    print ("Time: %s seconds" % (str(time.time() - tmp)))
+    if 1==1:
+        param['updater'] = gpu_algorithm
+        print("Training with '%s'" % param['updater'])
+        tmp = time.time()
+        xgb.train(param, dtrain, args.iterations)
+        print ("Time: %s seconds" % (str(time.time() - tmp)))
 
-    param['updater'] = cpu_algorithm
-    print("Training with '%s'" % param['updater'])
-    tmp = time.time()
-    xgb.train(param, dtrain, args.iterations)
-    print ("Time: %s seconds" % (str(time.time() - tmp)))
+    if 1==0:
+        param['updater'] = cpu_algorithm
+        print("Training with '%s'" % param['updater'])
+        tmp = time.time()
+        xgb.train(param, dtrain, args.iterations)
+        print ("Time: %sd seconds" % (str(time.time() - tmp)))
 
 
 
