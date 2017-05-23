@@ -73,7 +73,7 @@ struct GPUData {
         n_features, foffsets.data(), foffsets.data() + 1);
 
     // Allocate memory
-    size_t free_memory = dh::available_memory();
+    size_t free_memory = dh::available_memory(param_in.gpu_id);
     ba.allocate(&fvalues, in_fvalues.size(), &fvalues_temp, in_fvalues.size(),
                 &fvalues_cached, in_fvalues.size(), &foffsets,
                 in_foffsets.size(), &instance_id, in_instance_id.size(),
@@ -90,7 +90,7 @@ struct GPUData {
     if (!param_in.silent) {
       const int mb_size = 1048576;
       LOG(CONSOLE) << "Allocated " << ba.size() / mb_size << "/"
-                   << free_memory / mb_size << " MB on " << dh::device_name();
+                   << free_memory / mb_size << " MB on " << dh::device_name(param_in.gpu_id);
     }
 
     fvalues_cached = in_fvalues;

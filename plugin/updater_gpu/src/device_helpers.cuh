@@ -16,8 +16,8 @@
 #include <vector>
 
 // Uncomment to enable
-// #define DEVICE_TIMER
-// #define TIMERS
+//#define DEVICE_TIMER
+#define TIMERS
 
 namespace dh {
 
@@ -312,8 +312,8 @@ class dvec {
 
   template <memory_type MemoryT>
 class bulk_allocator {
-  char *d_ptr;
-  size_t _size;
+  std::vector<char*> d_ptr;
+  std::vector<size_t> _size;
 
   const size_t align = 256;
 
@@ -351,39 +351,42 @@ class bulk_allocator {
   }
 
     //    template <memory_type MemoryT>
-    char * allocate(size_t bytes, memory_type t){
+    char * allocate_device(size_t bytes, memory_type t){
       char * ptr;
       if(t==memory_type::DEVICE){
-        safe_cuda(cudaMalloc(&ptr, _size));
+        safe_cuda(cudaMalloc(&ptr, bytes));
       }
       else{
-        safe_cuda(cudaMallocManaged(&ptr, _size));
+        safe_cuda(cudaMallocManaged(&ptr, bytes));
       }
       return ptr;
     }
 
  public:
-  bulk_allocator() : _size(0), d_ptr(NULL) {}
+    //  bulk_allocator() : _size(0), d_ptr(NULL) {}
 
   ~bulk_allocator() {
-    if (!(d_ptr == nullptr)) {
-      safe_cuda(cudaFree(d_ptr));
+    for(auto &ptr:d_ptr){
+      if (!(ptr == nullptr)) {
+        safe_cuda(cudaFree(ptr));
+      }
     }
   }
 
-  size_t size() { return _size; }
+  // returns sum of bytes for all allocations
+  size_t size() { return std::accumulate(_size.begin(),_size.end(),static_cast<size_t>(0)); }
 
   template <typename... Args>
   void allocate(Args... args) {
-    if (d_ptr != NULL) {
-      throw std::runtime_error("Bulk allocator already allocated");
-    }
 
-    _size = get_size_bytes(args...);
+    size_t size= get_size_bytes(args...);
 
-    d_ptr = allocate(_size, MemoryT);
+    char *ptr = allocate_device(size, MemoryT);
 
-    allocate_dvec(d_ptr, args...);
+    allocate_dvec(ptr, args...);
+
+    d_ptr.push_back(ptr);
+    _size.push_back(size);
   }
 };
 
@@ -414,9 +417,10 @@ struct CubMemory {
   bool IsAllocated() { return d_temp_storage != NULL; }
 };
 
-inline size_t available_memory() {
+inline size_t available_memory(int device_idx) {
   size_t device_free = 0;
   size_t device_total = 0;
+  safe_cuda(cudaSetDevice(device_idx));
   dh::safe_cuda(cudaMemGetInfo(&device_free, &device_total));
   return device_free;
 }
@@ -425,21 +429,30 @@ inline size_t available_memory() {
 inline int n_visible_devices() {
   int n_visgpus = 0;
  
-  cudaGetDeviceCount(&n_visgpus));
+  cudaGetDeviceCount(&n_visgpus);
 
   return n_visgpus;
 }
 
-inline void synchronize_all() {
+  // if n_devices=-1, then use all visible devices
+inline void synchronize_n_devices(int n_devices) {
+  n_devices = n_devices<0 ? n_visible_devices() : n_devices;
+ 
   for(int device_idx=0;device_idx<n_devices;device_idx++){
     safe_cuda(cudaSetDevice(device_idx));
     safe_cuda(cudaDeviceSynchronize());
   }
 }
+inline void synchronize_all() {
+  for(int device_idx=0;device_idx<n_visible_devices();device_idx++){
+    safe_cuda(cudaSetDevice(device_idx));
+    safe_cuda(cudaDeviceSynchronize());
+  }
+}
 
-inline std::string device_name() {
+inline std::string device_name(int device_idx) {
   cudaDeviceProp prop;
-  dh::safe_cuda(cudaGetDeviceProperties(&prop, 0));
+  dh::safe_cuda(cudaGetDeviceProperties(&prop, device_idx));
   return std::string(prop.name);
 }
 
@@ -526,21 +539,19 @@ inline void launch_n(size_t n, L lambda) {
 #endif
 }
 
+  // if n_devices=-1, then use all visible devices
 template <int ITEMS_PER_THREAD = 8, int BLOCK_THREADS = 256, typename L>
 inline void multi_launch_n(size_t n, int n_devices, L lambda) {
+  n_devices = n_devices<0 ? n_visible_devices() : n_devices;
   CHECK_LE(n_devices,n_visible_devices()) << "Number of devices requested needs to be less than equal to number of visible devices.";
   const int GRID_SIZE = div_round_up(n, ITEMS_PER_THREAD * BLOCK_THREADS);
 #if defined(__CUDACC__)
-  if(n<n_devices){
-    launch_n_kernel<<<GRID_SIZE, BLOCK_THREADS>>>(static_cast<size_t>(0),n, lambda);
-  }
-  else{
-    for(int device_idx=0;device_idx<n_devices;device_idx++){
-      safe_cuda(cudaSetDevice(device_idx));
-      size_t begin=(n/n_devices)*device_idx;
-      size_t end=std::max((n/n_devices)*(device_idx+1),n);
-      launch_n_kernel<<<GRID_SIZE, BLOCK_THREADS>>>(device_idx,begin, end, lambda);
-    }
+  n_devices = n_devices > n ? n : n_devices;
+  for(int device_idx=0;device_idx<n_devices;device_idx++){
+    safe_cuda(cudaSetDevice(device_idx));
+    size_t begin=(n/n_devices)*device_idx;
+    size_t end=std::min((n/n_devices)*(device_idx+1),n);
+    launch_n_kernel<<<GRID_SIZE, BLOCK_THREADS>>>(device_idx,begin, end, lambda);
   }
 #endif
 }

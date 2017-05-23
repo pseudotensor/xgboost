@@ -34,19 +34,22 @@ void DeviceGMat::Init(const common::GHistIndexMatrix& gmat) {
 
 void DeviceHist::Init(int n_bins_in) {
   this->n_bins = n_bins_in;
-  CHECK(!hist.empty()) << "DeviceHist must be externally allocated";
+  CHECK(!data.empty()) << "DeviceHist must be externally allocated";
 }
 
-void DeviceHist::Reset() { hist.fill(gpu_gpair()); }
+void DeviceHist::Reset(int device_idx) {
+  cudaSetDevice(device_idx);
+  data.fill(gpu_gpair());
+}
 
 gpu_gpair* DeviceHist::GetLevelPtr(int depth) {
-  return hist.data() + n_nodes(depth - 1) * n_bins;
+  return data.data() + n_nodes(depth - 1) * n_bins;
 }
 
 int DeviceHist::LevelSize(int depth) { return n_bins * n_nodes_level(depth); }
 
 HistBuilder DeviceHist::GetBuilder() {
-  return HistBuilder(hist.data(), n_bins);
+  return HistBuilder(data.data(), n_bins);
 }
 
 HistBuilder::HistBuilder(gpu_gpair* ptr, int n_bins)
@@ -76,13 +79,115 @@ void GPUHistBuilder::Init(const TrainParam& param) {
       << "Loss guided growth policy not supported. Use CPU algorithm.";
   this->param = param;
 
-  dh::safe_cuda(cudaSetDevice(param.gpu_id));
-  if (!param.silent) {
-    LOG(CONSOLE) << "Device: [" << param.gpu_id << "] " << dh::device_name();
+  //  dh::safe_cuda(cudaSetDevice(param.gpu_id));
+  CHECK(param.n_gpus!=0) << "Must have at least one device";
+  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
+  for(int device_idx=0;device_idx<n_devices;device_idx++){
+    if (!param.silent) {
+      size_t free_memory = dh::available_memory(device_idx);
+      const int mb_size = 1048576;
+      LOG(CONSOLE) << "Device: [" << device_idx << "] " << dh::device_name(device_idx) << " with " << free_memory / mb_size << " MB available device memory.";
+    }
   }
 
-  CHECK_LE(param.n_gpus,n_devices()) << "Specify number of GPUs to be less or equal to number of visible GPU devices."
+  CHECK_LE(param.n_gpus,dh::n_visible_devices()) << "Specify number of GPUs to be less or equal to number of visible GPU devices.";
 
+}
+void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
+                              DMatrix& fmat,  // NOLINT
+                              const RegTree& tree) {
+
+  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
+  
+  if (!initialised) {
+    CHECK(fmat.SingleColBlock()) << "grow_gpu_hist: must have single column "
+                                    "block. Try setting 'tree_method' "
+                                    "parameter to 'exact'";
+    info = &fmat.info();
+    is_dense = info->num_nonzero == info->num_col * info->num_row;
+    hmat_.Init(&fmat, param.max_bin);
+    gmat_.cut = &hmat_;
+    gmat_.Init(&fmat);
+    int n_bins = hmat_.row_ptr.back();
+    int n_features = hmat_.row_ptr.size() - 1;
+
+    // Build feature segments
+    std::vector<int> h_feature_segments;
+    for (int node = 0; node < n_nodes_level(param.max_depth - 1); node++) {
+      for (int fidx = 0; fidx < hmat_.row_ptr.size() - 1; fidx++) {
+        h_feature_segments.push_back(hmat_.row_ptr[fidx] + node * n_bins);
+      }
+    }
+    h_feature_segments.push_back(n_nodes_level(param.max_depth - 1) * n_bins);
+
+    int level_max_bins = n_nodes_level(param.max_depth - 1) * n_bins;
+
+    // allocate unique common data
+    ba.allocate(&gidx_feature_map, n_bins, &hist_node_segments,
+                n_nodes_level(param.max_depth - 1) + 1, &feature_segments,
+                h_feature_segments.size(), &gain, level_max_bins, &position,
+                gpair.size(), &position_tmp, gpair.size(), &nodes,
+                n_nodes(param.max_depth), &gidx_fvalue_map, hmat_.cut.size(),
+                &fidx_min_map, hmat_.min_val.size(), &argmax,
+                n_nodes_level(param.max_depth - 1), &node_sums,
+                n_nodes_level(param.max_depth - 1) * n_features, &hist_scan,
+                level_max_bins, &device_gpair, gpair.size(),
+                &device_matrix.gidx, gmat_.index.size(), &device_matrix.ridx,
+                gmat_.index.size(), &feature_flags,
+                n_features, &left_child_smallest, n_nodes(param.max_depth - 1),
+                &prediction_cache, gpair.size());
+
+    // allocate multiple gpu histograms
+    hist_vec.resize(n_devices);
+    for(int device_idx=0;device_idx<n_devices;device_idx++){
+      ba.allocate(&(hist_vec[device_idx].data),
+                  n_nodes(param.max_depth - 1) * n_bins);
+      hist_vec[device_idx].Init(n_bins);
+    }
+  
+        
+    if (!param.silent) {
+      const int mb_size = 1048576;
+      LOG(CONSOLE) << "Allocated " << ba.size() / mb_size << " MB of Unified Memory";
+    }
+
+    // Construct feature map
+    std::vector<int> h_gidx_feature_map(n_bins);
+    for (int row = 0; row < hmat_.row_ptr.size() - 1; row++) {
+      for (int i = hmat_.row_ptr[row]; i < hmat_.row_ptr[row + 1]; i++) {
+        h_gidx_feature_map[i] = row;
+      }
+    }
+
+    gidx_feature_map = h_gidx_feature_map;
+
+    // Construct device matrix
+    device_matrix.Init(gmat_);
+
+    gidx_fvalue_map = hmat_.cut;
+    fidx_min_map = hmat_.min_val;
+
+    thrust::sequence(hist_node_segments.tbegin(), hist_node_segments.tend(), 0,
+                     n_bins);
+
+    feature_flags.fill(1);
+
+    feature_segments = h_feature_segments;
+
+
+    prediction_cache.fill(0);
+
+    initialised = true;
+  }
+  nodes.fill(Node());
+  position.fill(0);
+  device_gpair = gpair;
+  subsample_gpair(&device_gpair, param.subsample);
+
+  for(int device_idx=0;device_idx<n_devices;device_idx++){
+    hist_vec[device_idx].Reset(device_idx);
+  }
+  p_last_fmat_ = &fmat;
 }
 
 void GPUHistBuilder::BuildHist(int depth) {
@@ -90,10 +195,44 @@ void GPUHistBuilder::BuildHist(int depth) {
   auto d_gidx = device_matrix.gidx.data();
   auto d_position = position.data();
   auto d_gpair = device_gpair.data();
-  auto hist_builder = hist.GetBuilder();
   auto d_left_child_smallest = left_child_smallest.data();
 
-  dh::multi_launch_n(device_matrix.gidx.size(), [=] __device__(int idx, int device_idx) {
+  dh::Timer time;
+  
+  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
+  int n = device_matrix.gidx.size();
+  n_devices = n_devices > n ? n : n_devices;
+#if(1)
+  for(int device_idx=0;device_idx<n_devices;device_idx++){
+    size_t begin=(n/n_devices)*device_idx;
+    size_t end=std::min((n/n_devices)*(device_idx+1),n);
+    
+    dh::safe_cuda(cudaSetDevice(device_idx));
+
+    auto hist_builder = hist_vec[device_idx].GetBuilder();
+    
+    dh::launch_n(end-begin, [=] __device__(int local_idx) {
+        
+        int idx = begin + local_idx;
+        int ridx = d_ridx[idx];
+        int pos = d_position[ridx];
+        if (!is_active(pos, depth)) return;
+
+        // Only increment smallest node
+        bool is_smallest =
+          (d_left_child_smallest[parent_nidx(pos)] && is_left_child(pos)) ||
+          (!d_left_child_smallest[parent_nidx(pos)] && !is_left_child(pos));
+        if (!is_smallest && depth > 0) return;
+        
+        int gidx = d_gidx[idx];
+        gpu_gpair gpair = d_gpair[ridx];
+        
+        hist_builder.Add(gpair, gidx, pos);
+      });
+  }
+#else
+  // TODO: doesn't work because need to pass all n_gpus of pointers of hist_builder
+  dh::multi_launch_n(device_matrix.gidx.size(), param.n_gpus, [=] __device__(int idx, int device_idx) {
     int ridx = d_ridx[idx];
     int pos = d_position[ridx];
     if (!is_active(pos, depth)) return;
@@ -109,11 +248,35 @@ void GPUHistBuilder::BuildHist(int depth) {
 
     hist_builder.Add(gpair, gidx, pos);
   });
+ 
+#endif
 
   //  dh::safe_cuda(cudaDeviceSynchronize());
- dh:synchronize_all();
+  dh::synchronize_n_devices(param.n_gpus);
 
+  time.printElapsed("Add Time");
+
+
+  // reduce each element of histogram across multiple gpus
+  int master_device=0; // param.gpu_id ?
+  dh::safe_cuda(cudaSetDevice(master_device));
+  for(int device_idx=0;device_idx<n_devices;device_idx++){ // Note the 1
+    if(device_idx==master_device) continue;
+    auto master_hist_data = hist_vec[master_device].GetLevelPtr(depth);
+    auto slave_hist_data = hist_vec[device_idx].GetLevelPtr(depth);
+    dh::launch_n(hist_vec[master_device].LevelSize(depth), [=] __device__(int idx) {
+
+        master_hist_data[idx] += slave_hist_data[idx];
+        
+      });
+    dh::safe_cuda(cudaDeviceSynchronize());
+  }  
+
+  time.printElapsed("Reduce-Add Time");
+
+  
   // Subtraction trick
+  auto hist_builder = hist_vec[master_device].GetBuilder();
   int n_sub_bins = (n_nodes_level(depth) / 2) * hist_builder.n_bins;
   if (depth > 0) {
     dh::launch_n(n_sub_bins, [=] __device__(int idx) {
@@ -288,7 +451,7 @@ void GPUHistBuilder::FindSplitSpecialize<MAX_BLOCK_THREADS>(int depth) {
 
   find_split_kernel<
       MAX_BLOCK_THREADS><<<GRID_SIZE, MAX_BLOCK_THREADS>>>(
-      hist.GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
+      hist_vec[0].GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
       hmat_.row_ptr.back(), nodes.data(), fidx_min_map.data(),
       gidx_fvalue_map.data(), gpu_param, left_child_smallest.data(), colsample,
       feature_flags.data());
@@ -303,7 +466,7 @@ void GPUHistBuilder::FindSplitSpecialize(int depth) {
         param.colsample_bylevel < 1.0 || param.colsample_bytree < 1.0;
 
     find_split_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>(
-        hist.GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
+        hist_vec[0].GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
         hmat_.row_ptr.back(), nodes.data(), fidx_min_map.data(),
         gidx_fvalue_map.data(), gpu_param, left_child_smallest.data(),
         colsample, feature_flags.data());
@@ -464,90 +627,6 @@ void GPUHistBuilder::ColSampleLevel() {
   feature_flags = h_feature_flags;
 }
 
-void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
-                              DMatrix& fmat,  // NOLINT
-                              const RegTree& tree) {
-  if (!initialised) {
-    CHECK(fmat.SingleColBlock()) << "grow_gpu_hist: must have single column "
-                                    "block. Try setting 'tree_method' "
-                                    "parameter to 'exact'";
-    info = &fmat.info();
-    is_dense = info->num_nonzero == info->num_col * info->num_row;
-    hmat_.Init(&fmat, param.max_bin);
-    gmat_.cut = &hmat_;
-    gmat_.Init(&fmat);
-    int n_bins = hmat_.row_ptr.back();
-    int n_features = hmat_.row_ptr.size() - 1;
-
-    // Build feature segments
-    std::vector<int> h_feature_segments;
-    for (int node = 0; node < n_nodes_level(param.max_depth - 1); node++) {
-      for (int fidx = 0; fidx < hmat_.row_ptr.size() - 1; fidx++) {
-        h_feature_segments.push_back(hmat_.row_ptr[fidx] + node * n_bins);
-      }
-    }
-    h_feature_segments.push_back(n_nodes_level(param.max_depth - 1) * n_bins);
-
-    int level_max_bins = n_nodes_level(param.max_depth - 1) * n_bins;
-
-    size_t free_memory = dh::available_memory();
-    ba.allocate(&gidx_feature_map, n_bins, &hist_node_segments,
-                n_nodes_level(param.max_depth - 1) + 1, &feature_segments,
-                h_feature_segments.size(), &gain, level_max_bins, &position,
-                gpair.size(), &position_tmp, gpair.size(), &nodes,
-                n_nodes(param.max_depth), &gidx_fvalue_map, hmat_.cut.size(),
-                &fidx_min_map, hmat_.min_val.size(), &argmax,
-                n_nodes_level(param.max_depth - 1), &node_sums,
-                n_nodes_level(param.max_depth - 1) * n_features, &hist_scan,
-                level_max_bins, &device_gpair, gpair.size(),
-                &device_matrix.gidx, gmat_.index.size(), &device_matrix.ridx,
-                gmat_.index.size(), &hist.hist,
-                n_nodes(param.max_depth - 1) * n_bins, &feature_flags,
-                n_features, &left_child_smallest, n_nodes(param.max_depth - 1),
-                &prediction_cache, gpair.size());
-
-    if (!param.silent) {
-      const int mb_size = 1048576;
-      LOG(CONSOLE) << "Allocated " << ba.size() / mb_size << "/"
-                   << free_memory / mb_size << " MB on " << dh::device_name();
-    }
-
-    // Construct feature map
-    std::vector<int> h_gidx_feature_map(n_bins);
-    for (int row = 0; row < hmat_.row_ptr.size() - 1; row++) {
-      for (int i = hmat_.row_ptr[row]; i < hmat_.row_ptr[row + 1]; i++) {
-        h_gidx_feature_map[i] = row;
-      }
-    }
-
-    gidx_feature_map = h_gidx_feature_map;
-
-    // Construct device matrix
-    device_matrix.Init(gmat_);
-
-    gidx_fvalue_map = hmat_.cut;
-    fidx_min_map = hmat_.min_val;
-
-    thrust::sequence(hist_node_segments.tbegin(), hist_node_segments.tend(), 0,
-                     n_bins);
-
-    feature_flags.fill(1);
-
-    feature_segments = h_feature_segments;
-
-    hist.Init(n_bins);
-
-    prediction_cache.fill(0);
-
-    initialised = true;
-  }
-  nodes.fill(Node());
-  position.fill(0);
-  device_gpair = gpair;
-  subsample_gpair(&device_gpair, param.subsample);
-  hist.Reset();
-  p_last_fmat_ = &fmat;
-}
 
 bool GPUHistBuilder::UpdatePredictionCache(
     const DMatrix* data, std::vector<bst_float>* p_out_preds) {
@@ -584,12 +663,18 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
   this->InitData(gpair, *p_fmat, *p_tree);
   this->InitFirstNode();
   this->ColSampleTree();
+  long long int elapsed=0;
   for (int depth = 0; depth < param.max_depth; depth++) {
     this->ColSampleLevel();
+    dh::Timer time;
     this->BuildHist(depth);
+    elapsed+=time.elapsed();
+    printf("depth=%d ",depth);
+    time.printElapsed("BuildHist Time");
     this->FindSplit(depth);
     this->UpdatePosition(depth);
   }
+  printf("Total BuildHist Time=%lld\n",elapsed);
   dense2sparse_tree(p_tree, nodes.tbegin(), nodes.tend(), param);
 }
 }  // namespace tree

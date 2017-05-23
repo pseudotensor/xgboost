@@ -32,7 +32,7 @@ void GPUBuilder::Init(const TrainParam& param_in) {
 
   dh::safe_cuda(cudaSetDevice(param.gpu_id));
   if (!param.silent) {
-    LOG(CONSOLE) << "Device: [" << param.gpu_id << "] " << dh::device_name();
+    LOG(CONSOLE) << "Device: [" << param.gpu_id << "] " << dh::device_name(param.gpu_id);
   }
 }
 

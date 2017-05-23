@@ -33,11 +33,11 @@ struct HistBuilder {
 
 struct DeviceHist {
   int n_bins;
-  dh::dvec<gpu_gpair> hist;
+  dh::dvec<gpu_gpair> data;
 
   void Init(int max_depth);
 
-  void Reset();
+  void Reset(int device_idx);
 
   HistBuilder GetBuilder();
 
@@ -97,7 +97,7 @@ class GPUHistBuilder {
   dh::dvec<NodeIdT> position_tmp;
   dh::dvec<float> gidx_fvalue_map;
   dh::dvec<float> fidx_min_map;
-  DeviceHist hist;
+  std::vector<DeviceHist> hist_vec;
   dh::dvec<cub::KeyValuePair<int, float>> argmax;
   dh::dvec<gpu_gpair> node_sums;
   dh::dvec<gpu_gpair> hist_scan;
