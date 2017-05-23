@@ -74,7 +74,8 @@ struct GPUData {
 
     // Allocate memory
     size_t free_memory = dh::available_memory(param_in.gpu_id);
-    ba.allocate(&fvalues, in_fvalues.size(), &fvalues_temp, in_fvalues.size(),
+    ba.allocate(param_in.gpu_id,
+                &fvalues, in_fvalues.size(), &fvalues_temp, in_fvalues.size(),
                 &fvalues_cached, in_fvalues.size(), &foffsets,
                 in_foffsets.size(), &instance_id, in_instance_id.size(),
                 &instance_id_temp, in_instance_id.size(), &instance_id_cached,

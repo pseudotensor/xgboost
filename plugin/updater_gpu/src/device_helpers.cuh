@@ -241,31 +241,36 @@ class dvec {
  private:
   T *_ptr;
   size_t _size;
+  int _device_idx;
 
 
  public:
-  void external_allocate(void *ptr, size_t size) {
+  void external_allocate(int device_idx, void *ptr, size_t size) {
     if (!empty()) {
       throw std::runtime_error("Tried to allocate dvec but already allocated");
     }
 
     _ptr = static_cast<T *>(ptr);
     _size = size;
+    _device_idx = device_idx;
   }
 
-  dvec() : _ptr(NULL), _size(0) {}
+  dvec() : _ptr(NULL), _size(0), _device_idx(0) {}
   size_t size() const { return _size; }
+  int device_idx() const { return _device_idx; }
   bool empty() const { return _ptr == NULL || _size == 0; }
   T *data() { return _ptr; }
 
   std::vector<T> as_vector() const {
     std::vector<T> h_vector(size());
+    safe_cuda(cudaSetDevice(_device_idx));
     safe_cuda(cudaMemcpy(h_vector.data(), _ptr, size() * sizeof(T),
                          cudaMemcpyDeviceToHost));
     return h_vector;
   }
 
   void fill(T value) {
+    safe_cuda(cudaSetDevice(_device_idx));
     thrust::fill_n(thrust::device_pointer_cast(_ptr), size(), value);
   }
 
@@ -285,28 +290,39 @@ class dvec {
     return thrust::device_pointer_cast(_ptr + size());
   }
 
-    template <typename T2>
+  template <typename T2>
   dvec &operator=(const std::vector<T2> &other) {
-    if (other.size() != size()) {
-      throw std::runtime_error(
-          "Cannot copy assign vector to dvec, sizes are different");
-    }
-
-    thrust::copy(other.begin(), other.end(), this->tbegin());
-
+    this->copy(other.begin(), other.end());
     return *this;
   }
 
-    dvec &operator=(dvec<T> &other) {
+  dvec &operator=(dvec<T> &other) {
     if (other.size() != size()) {
       throw std::runtime_error(
           "Cannot copy assign dvec to dvec, sizes are different");
     }
 
-    thrust::copy(other.tbegin(), other.tend(), this->tbegin());
+    safe_cuda(cudaSetDevice(this->device_idx()));
+    if(other.device_idx() == this->device_idx()){
+      thrust::copy(other.tbegin(), other.tend(), this->tbegin());
+    }
+    else{
+      throw std::runtime_error(
+          "Cannot copy to/from different devices");
+    }
 
     return *this;
   }
+
+    template <typename IterT>
+    void copy(IterT begin, IterT end){
+      safe_cuda(cudaSetDevice(this->device_idx()));
+      if (end-begin != size()) {
+        throw std::runtime_error("Cannot copy assign vector to dvec, sizes are different");
+      }
+      thrust::copy(begin,end,this->tbegin());
+    }
+    
 };
 
 
@@ -314,6 +330,7 @@ class dvec {
 class bulk_allocator {
   std::vector<char*> d_ptr;
   std::vector<size_t> _size;
+  std::vector<int> _device_idx;
 
   const size_t align = 256;
 
@@ -338,22 +355,23 @@ class bulk_allocator {
   }
 
   template <typename T, typename SizeT>
-  void allocate_dvec(char *ptr, dvec<T> *first_vec, SizeT first_size) {
-    first_vec->external_allocate(static_cast<void *>(ptr), first_size);
+  void allocate_dvec(int device_idx, char *ptr, dvec<T> *first_vec, SizeT first_size) {
+    first_vec->external_allocate(device_idx, static_cast<void *>(ptr), first_size);
   }
 
   template <typename T, typename SizeT, typename... Args>
-  void allocate_dvec(char *ptr, dvec<T> *first_vec, SizeT first_size,
+  void allocate_dvec(int device_idx, char *ptr, dvec<T> *first_vec, SizeT first_size,
                      Args... args) {
-    first_vec->external_allocate(static_cast<void *>(ptr), first_size);
+    first_vec->external_allocate(device_idx, static_cast<void *>(ptr), first_size);
     ptr += align_round_up(first_size * sizeof(T));
-    allocate_dvec(ptr, args...);
+    allocate_dvec(device_idx, ptr, args...);
   }
 
     //    template <memory_type MemoryT>
-    char * allocate_device(size_t bytes, memory_type t){
+    char * allocate_device(int device_idx, size_t bytes, memory_type t){
       char * ptr;
       if(t==memory_type::DEVICE){
+        safe_cuda(cudaSetDevice(device_idx));
         safe_cuda(cudaMalloc(&ptr, bytes));
       }
       else{
@@ -363,12 +381,11 @@ class bulk_allocator {
     }
 
  public:
-    //  bulk_allocator() : _size(0), d_ptr(NULL) {}
-
   ~bulk_allocator() {
-    for(auto &ptr:d_ptr){
-      if (!(ptr == nullptr)) {
-        safe_cuda(cudaFree(ptr));
+    for(int i=0;i<d_ptr.size();i++){
+      if (!(d_ptr[i] == nullptr)) {
+        safe_cuda(cudaSetDevice(_device_idx[i]));
+        safe_cuda(cudaFree(d_ptr[i]));
       }
     }
   }
@@ -377,16 +394,17 @@ class bulk_allocator {
   size_t size() { return std::accumulate(_size.begin(),_size.end(),static_cast<size_t>(0)); }
 
   template <typename... Args>
-  void allocate(Args... args) {
+  void allocate(int device_idx, Args... args) {
 
     size_t size= get_size_bytes(args...);
 
-    char *ptr = allocate_device(size, MemoryT);
+    char *ptr = allocate_device(device_idx, size, MemoryT);
 
-    allocate_dvec(ptr, args...);
+    allocate_dvec(device_idx, ptr, args...);
 
     d_ptr.push_back(ptr);
     _size.push_back(size);
+    _device_idx.push_back(device_idx);
   }
 };
 

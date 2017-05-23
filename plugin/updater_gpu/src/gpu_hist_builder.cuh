@@ -20,7 +20,7 @@ namespace tree {
 struct DeviceGMat {
   dh::dvec<int> gidx;
   dh::dvec<int> ridx;
-  void Init(const common::GHistIndexMatrix &gmat);
+  void Init(int device_idx, const common::GHistIndexMatrix& gmat, bst_uint begin, bst_uint end);
 };
 
 struct HistBuilder {
@@ -64,16 +64,17 @@ class GPUHistBuilder {
               RegTree *p_tree);
   void BuildHist(int depth);
   void FindSplit(int depth);
+  void SynchronizeTree(int depth);
   template <int BLOCK_THREADS>
   void FindSplitSpecialize(int depth);
-  void InitFirstNode();
+  void InitFirstNode(const std::vector<bst_gpair> &gpair);
   void UpdatePosition(int depth);
   void UpdatePositionDense(int depth);
   void UpdatePositionSparse(int depth);
   void ColSampleTree();
   void ColSampleLevel();
-  bool UpdatePredictionCache(const DMatrix *data,
-                             std::vector<bst_float> *p_out_preds);
+  //  bool UpdatePredictionCache(const DMatrix *data,
+  //                             std::vector<bst_float> *p_out_preds);
 
   TrainParam param;
   GPUTrainingParam gpu_param;
@@ -82,34 +83,37 @@ class GPUHistBuilder {
   MetaInfo *info;
   bool initialised;
   bool is_dense;
-  DeviceGMat device_matrix;
+  std::vector<DeviceGMat> device_matrix;
   const DMatrix *p_last_fmat_;
 
   // choose which memory type to use (DEVICE or DEVICE_MANAGED)
-  //  dh::bulk_allocator<dh::memory_type::DEVICE> ba;
-  dh::bulk_allocator<dh::memory_type::DEVICE_MANAGED> ba;
+  dh::bulk_allocator<dh::memory_type::DEVICE> ba;
+  //dh::bulk_allocator<dh::memory_type::DEVICE_MANAGED> ba;
   dh::CubMemory cub_mem;
-  dh::dvec<int> gidx_feature_map;
   dh::dvec<int> hist_node_segments;
   dh::dvec<int> feature_segments;
   dh::dvec<float> gain;
-  dh::dvec<NodeIdT> position;
-  dh::dvec<NodeIdT> position_tmp;
-  dh::dvec<float> gidx_fvalue_map;
   dh::dvec<float> fidx_min_map;
-  std::vector<DeviceHist> hist_vec;
+  DeviceHist hist_temp;
   dh::dvec<cub::KeyValuePair<int, float>> argmax;
   dh::dvec<gpu_gpair> node_sums;
   dh::dvec<gpu_gpair> hist_scan;
-  dh::dvec<gpu_gpair> device_gpair;
-  dh::dvec<Node> nodes;
   dh::dvec<int> feature_flags;
-  dh::dvec<bool> left_child_smallest;
   dh::dvec<bst_float> prediction_cache;
   bool prediction_cache_initialised;
 
+  std::vector<dh::dvec<float>> gidx_fvalue_map;
+  std::vector<dh::dvec<int>> gidx_feature_map;
+  std::vector<dh::dvec<NodeIdT>> position;
+  std::vector<dh::dvec<NodeIdT>> position_tmp;
+  std::vector<dh::dvec<gpu_gpair>> device_gpair;
+  std::vector<dh::dvec<Node>> nodes;
+  std::vector<dh::dvec<bool>> left_child_smallest;
   std::vector<int> feature_set_tree;
   std::vector<int> feature_set_level;
+  std::vector<int> device_row_segments;
+  std::vector<int> device_element_segments;
+  std::vector<DeviceHist> hist_vec;
 };
 }  // namespace tree
 }  // namespace xgboost
