@@ -15,8 +15,10 @@ def run_benchmark(args, gpu_algorithm, cpu_algorithm):
 
     param = {'objective': 'binary:logistic',
              'tree_method': 'exact',
-             'max_depth': 6,
-             'silent': 1,
+             'max_depth': 12,
+             'max_bin': 256,
+             'silent': 0,
+             'n_gpus': -1,
              'eval_metric': 'auc'}
 
     param['updater'] = gpu_algorithm
@@ -25,11 +27,12 @@ def run_benchmark(args, gpu_algorithm, cpu_algorithm):
     xgb.train(param, dtrain, args.iterations)
     print ("Time: %s seconds" % (str(time.time() - tmp)))
 
-    param['updater'] = cpu_algorithm
-    print("Training with '%s'" % param['updater'])
-    tmp = time.time()
-    xgb.train(param, dtrain, args.iterations)
-    print ("Time: %s seconds" % (str(time.time() - tmp)))
+    if 1==0:
+        param['updater'] = cpu_algorithm
+        print("Training with '%s'" % param['updater'])
+        tmp = time.time()
+        xgb.train(param, dtrain, args.iterations)
+        print ("Time: %s seconds" % (str(time.time() - tmp)))
 
 
 

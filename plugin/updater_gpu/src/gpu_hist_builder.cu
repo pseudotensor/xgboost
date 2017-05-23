@@ -38,7 +38,7 @@ void DeviceHist::Init(int n_bins_in) {
 }
 
 void DeviceHist::Reset(int device_idx) {
-  cudaSetDevice(device_idx);
+  cudaSetDevice(0);
   data.fill(gpu_gpair());
 }
 
@@ -207,7 +207,7 @@ void GPUHistBuilder::BuildHist(int depth) {
     size_t begin=(n/n_devices)*device_idx;
     size_t end=std::min((n/n_devices)*(device_idx+1),n);
     
-    dh::safe_cuda(cudaSetDevice(device_idx));
+    dh::safe_cuda(cudaSetDevice(0));
 
     auto hist_builder = hist_vec[device_idx].GetBuilder();
     
