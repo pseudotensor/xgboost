@@ -94,7 +94,7 @@ void GPUHistBuilder::Init(const TrainParam& param) {
   CHECK_LE(param.n_gpus,dh::n_visible_devices()) << "Specify number of GPUs to be less or equal to number of visible GPU devices.";
 
 }
-void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
+  void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
                               DMatrix& fmat,  // NOLINT
                               const RegTree& tree) {
 
@@ -165,8 +165,18 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     hist_temp.Init(n_bins);
 
     
-    // allocate multiple gpu histograms
+    // allocate vectors across all devices
     hist_vec.resize(n_devices);
+    left_child_smallest.resize(n_devices);
+    nodes.resize(n_devices);
+    position.resize(n_devices);
+    position_tmp.resize(n_devices);
+    device_matrix.resize(n_devices);
+    device_matrix.resize(n_devices);
+    device_gpair.resize(n_devices);
+    gidx_feature_map.resize(n_devices);
+    gidx_fvalue_map.resize(n_devices);
+    
 
     // shard rows onto gpus
     for(int device_idx=0;device_idx<n_devices;device_idx++){
@@ -581,7 +591,9 @@ void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
   int master_device=0;
   auto d_nodes = nodes[master_device].data();
   auto gpu_param_alias = gpu_param;
-
+  
+  dh::safe_cuda(cudaSetDevice(master_device));
+  
   dh::launch_n(1, [=] __device__(int idx) {
     gpu_gpair sum_gradients = sum;
     d_nodes[idx] = Node(
@@ -772,19 +784,19 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
   this->InitData(gpair, *p_fmat, *p_tree);
   this->InitFirstNode(gpair);
   this->ColSampleTree();
-  //  long long int elapsed=0;
+  long long int elapsed=0;
   for (int depth = 0; depth < param.max_depth; depth++) {
     this->ColSampleLevel();
-    //    dh::Timer time;
+    dh::Timer time;
     this->BuildHist(depth);
-    //    elapsed+=time.elapsed();
-    //    printf("depth=%d ",depth);
-    //    time.printElapsed("BuildHist Time");
+    elapsed+=time.elapsed();
+    printf("depth=%d ",depth);
+    time.printElapsed("BuildHist Time");
     this->FindSplit(depth);
     this->SynchronizeTree(depth);
     this->UpdatePosition(depth);
   }
-  //  printf("Total BuildHist Time=%lld\n",elapsed);
+  printf("Total BuildHist Time=%lld\n",elapsed);
   int master_device=0;
   dense2sparse_tree(p_tree, nodes[master_device].tbegin(), nodes[master_device].tend(), param);
 }
