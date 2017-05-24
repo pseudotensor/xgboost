@@ -73,8 +73,8 @@ class GPUHistBuilder {
   void UpdatePositionSparse(int depth);
   void ColSampleTree();
   void ColSampleLevel();
-  //  bool UpdatePredictionCache(const DMatrix *data,
-  //                             std::vector<bst_float> *p_out_preds);
+  bool UpdatePredictionCache(const DMatrix *data,
+                             std::vector<bst_float> *p_out_preds);
 
   TrainParam param;
   GPUTrainingParam gpu_param;
@@ -99,9 +99,9 @@ class GPUHistBuilder {
   dh::dvec<gpu_gpair> node_sums;
   dh::dvec<gpu_gpair> hist_scan;
   dh::dvec<int> feature_flags;
-  dh::dvec<bst_float> prediction_cache;
   bool prediction_cache_initialised;
 
+  std::vector<dh::dvec<bst_float>> prediction_cache;
   std::vector<dh::dvec<float>> gidx_fvalue_map;
   std::vector<dh::dvec<int>> gidx_feature_map;
   std::vector<dh::dvec<NodeIdT>> position;

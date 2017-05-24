@@ -144,7 +144,8 @@ struct Timer {
   void reset() { start = ClockT::now(); }
   int64_t elapsed() const { return (ClockT::now() - start).count(); }
   void printElapsed(std::string label) {
-    safe_cuda(cudaDeviceSynchronize());
+    //    safe_cuda(cudaDeviceSynchronize());
+    dh::synchronize_all();
     printf("%s:\t %lld\n", label.c_str(), elapsed());
     reset();
   }
