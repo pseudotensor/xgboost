@@ -1,6 +1,7 @@
 /*!
  * Copyright 2017 Rory mitchell
  */
+#include <future>
 #include <thrust/binary_search.h>
 #include <thrust/count.h>
 #include <thrust/sequence.h>
@@ -572,21 +573,32 @@ void GPUHistBuilder::SynchronizeTree(int depth) {
 }
 
 void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
-  /*
-  auto d_gpair = device_gpair.data();
-  auto d_node_sums = node_sums.data();
-  auto gpu_param_alias = gpu_param;
 
-  size_t temp_storage_bytes;
-  cub::DeviceReduce::Reduce(nullptr, temp_storage_bytes, d_gpair, d_node_sums,
-                            device_gpair.size(), cub::Sum(), gpu_gpair());
-  cub_mem.LazyAllocate(temp_storage_bytes);
-  cub::DeviceReduce::Reduce(cub_mem.d_temp_storage, cub_mem.temp_storage_bytes,
-                            d_gpair, d_node_sums, device_gpair.size(),
-                            cub::Sum(), gpu_gpair());
-  */
-  // TODO: Make multi-GPU instead of using host
-  gpu_gpair sum=std::accumulate(gpair.begin(),gpair.end(),gpu_gpair());
+  int n_devices=device_gpair.size();
+
+  // asynch reduce per device
+  std::vector<std::future<gpu_gpair>> future_results(n_devices);
+  for(int device_idx=0;device_idx<n_devices;device_idx++){
+    dh::safe_cuda(cudaSetDevice(device_idx));
+    
+    auto begin        = device_gpair[device_idx].tbegin();
+    auto end          = device_gpair[device_idx].tend();
+    gpu_gpair init = gpu_gpair();
+    auto binary_op    = thrust::plus<gpu_gpair>();
+
+    // std::async captures the algorithm parameters by value
+    // use std::launch::async to ensure the creation of a new thread
+    future_results[device_idx] = std::async(std::launch::async, [=]
+                                                         {
+                                                           return thrust::reduce(begin, end, init, binary_op);
+                                                         });
+  }
+
+  // sum over devices
+  gpu_gpair sum=gpu_gpair();
+  for(int device_idx=0;device_idx<n_devices;device_idx++){
+    sum+=future_results[device_idx].get();
+  }
 
   int master_device=0;
   auto d_nodes = nodes[master_device].data();
@@ -782,7 +794,7 @@ bool GPUHistBuilder::UpdatePredictionCache(
 void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
                             DMatrix* p_fmat, RegTree* p_tree) {
   this->InitData(gpair, *p_fmat, *p_tree);
-  this->InitFirstNode(gpair);
+  this->InitFirstNode(gpair); // only creates first node on master, which is used by FindSplit (currently only on master)
   this->ColSampleTree();
   long long int elapsed=0;
   for (int depth = 0; depth < param.max_depth; depth++) {
