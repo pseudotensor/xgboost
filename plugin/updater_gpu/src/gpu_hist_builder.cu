@@ -552,22 +552,30 @@ void GPUHistBuilder::SynchronizeTree(int depth) {
   int master_device=0;
   int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
 
+  dh::safe_cuda(cudaSetDevice(master_device));
+  cudaStream_t stream[n_devices*2]; // stream per memcpypeerasync
+  for (int i = 0; i < n_devices*2; ++i){
+    cudaStreamCreate(&stream[i]);
+  }
+  
   for(int device_idx=0;device_idx<n_devices;device_idx++){
     if(device_idx==master_device) continue;
+
+    
     auto master_node_data = nodes[master_device].data();
     auto slave_node_data = nodes[device_idx].data();
     int node_count_bytes = nodes[master_device].size()*sizeof(Node);
 
-    cudaMemcpyPeer(slave_node_data,device_idx,master_node_data,master_device,node_count_bytes);
+    cudaMemcpyPeerAsync(slave_node_data,device_idx,master_node_data,master_device,node_count_bytes,stream[device_idx*2]);
 
     auto master_left_child_smallest_data = left_child_smallest[master_device].data();
     auto slave_left_child_smallest_data = left_child_smallest[device_idx].data();
     int left_child_smallest_count_bytes = left_child_smallest[master_device].size()*sizeof(bool);
 
-    cudaMemcpyPeer(slave_left_child_smallest_data,device_idx,master_left_child_smallest_data,master_device,left_child_smallest_count_bytes);
-    // TODO: Asynch then synch outside loop
+    cudaMemcpyPeerAsync(slave_left_child_smallest_data,device_idx,master_left_child_smallest_data,master_device,left_child_smallest_count_bytes,stream[device_idx*2+1]);
     // TODO: Only copy level, not entire tree
   }
+  for (int i = 0; i < n_devices*2; ++i) cudaStreamDestroy(stream[i]);
   
 
 }
