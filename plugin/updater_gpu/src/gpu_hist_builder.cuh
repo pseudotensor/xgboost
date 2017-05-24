@@ -10,7 +10,7 @@
 #include "../../src/tree/param.h"
 #include "device_helpers.cuh"
 #include "types.cuh"
-
+#include "nccl.h"
 
 namespace xgboost {
 
@@ -114,6 +114,7 @@ class GPUHistBuilder {
   std::vector<int> device_row_segments;
   std::vector<int> device_element_segments;
   std::vector<DeviceHist> hist_vec;
+  std::vector<ncclComm_t> comms;
 };
 }  // namespace tree
 }  // namespace xgboost

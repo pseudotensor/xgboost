@@ -73,7 +73,13 @@ GPUHistBuilder::GPUHistBuilder()
       p_last_fmat_(nullptr),
       prediction_cache_initialised(false) {}
 
-GPUHistBuilder::~GPUHistBuilder() {}
+GPUHistBuilder::~GPUHistBuilder() {
+  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
+
+  for(int i=0; i<n_devices; ++i)
+    ncclCommDestroy(comms[i]);
+  
+}
 
 void GPUHistBuilder::Init(const TrainParam& param) {
   CHECK(param.max_depth < 16) << "Tree depth too large.";
@@ -107,6 +113,27 @@ void GPUHistBuilder::Init(const TrainParam& param) {
 
 
   if (!initialised) {
+
+    // initialize nccl
+    std::vector<int> dList(n_devices);
+    for (int i = 0; i < n_devices; ++i)
+      dList[i] = i; // TODO: overload each GPU % nVis
+
+    comms.resize(n_devices);
+    dh::safe_nccl(ncclCommInitAll(comms.data(), n_devices, dList.data())); // initialize communicator (One communicator per process)
+    printf("# NCCL: Using devices\n");
+    for (int g = 0; g < n_devices; ++g) {
+      int cudaDev;
+      int rank;
+      cudaDeviceProp prop;
+      dh::safe_nccl(ncclCommCuDevice(comms[g], &cudaDev));
+      dh::safe_nccl(ncclCommUserRank(comms[g], &rank));
+      dh::safe_cuda(cudaGetDeviceProperties(&prop, cudaDev));
+      printf("#   Rank %2d uses device %2d [0x%02x] %s\n", rank, cudaDev,
+             prop.pciBusID, prop.name); fflush(stdout);
+    }
+    
+    
     CHECK(fmat.SingleColBlock()) << "grow_gpu_hist: must have single column "
                                     "block. Try setting 'tree_method' "
                                     "parameter to 'exact'";
@@ -571,7 +598,6 @@ void GPUHistBuilder::SynchronizeTree(int depth) {
     int left_child_smallest_count_bytes = n_nodes_level(depth)*sizeof(bool);
 
     cudaMemcpyPeerAsync(slave_left_child_smallest_data,device_idx,master_left_child_smallest_data,master_device,left_child_smallest_count_bytes);
-    // TODO: Only copy level, not entire tree
   }
   
 

@@ -8,6 +8,7 @@
 #include <thrust/random.h>
 #include <thrust/system/cuda/error.h>
 #include <thrust/system_error.h>
+#include "nccl.h"
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -39,6 +40,23 @@ inline cudaError_t throw_on_cuda_error(cudaError_t code, const char *file,
 
   return code;
 }
+
+#define safe_nccl(ans) throw_on_nccl_error((ans), __FILE__, __LINE__)
+
+inline ncclResult_t throw_on_nccl_error(ncclResult_t code, const char *file,
+                                       int line) {
+  if (code != ncclSuccess) {
+    std::stringstream ss;
+    ss << "NCCL failure :" << ncclGetErrorString(code) << " ";
+    ss << file << "(" << line << ")";
+    throw ss.str();
+  }
+
+  return code;
+}
+
+
+  
 
 #define gpuErrchk(ans) \
   { gpuAssert((ans), __FILE__, __LINE__); }
@@ -145,7 +163,12 @@ struct Timer {
   int64_t elapsed() const { return (ClockT::now() - start).count(); }
   void printElapsed(std::string label) {
     //    safe_cuda(cudaDeviceSynchronize());
-    dh::synchronize_all();
+    int n_visgpus;
+    cudaGetDeviceCount(&n_visgpus);
+    for(int device_idx=0;device_idx<n_visgpus;device_idx++){
+      safe_cuda(cudaSetDevice(device_idx));
+      safe_cuda(cudaDeviceSynchronize());
+    }
     printf("%s:\t %lld\n", label.c_str(), elapsed());
     reset();
   }

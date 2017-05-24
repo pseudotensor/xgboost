@@ -107,8 +107,11 @@ if(PLUGIN_UPDATER_GPU)
     find_package(CUDA QUIET REQUIRED)
 	file(GLOB_RECURSE CUDA_SOURCES "plugin/updater_gpu/src/*")
     cuda_add_library(updater_gpu STATIC 
-        ${CUDA_SOURCES}
-    )
+      ${CUDA_SOURCES}
+      )
+    link_directories("/usr/local/cuda/lib64/")
+    target_link_libraries(updater_gpu nccl)
+    
 endif()
 
 add_executable(xgboost ${SOURCES})
