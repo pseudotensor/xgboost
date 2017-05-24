@@ -388,7 +388,6 @@ void GPUHistBuilder::BuildHist(int depth) {
       hist_builder.Add(parent - other, gidx, nidx);
     });
   }
-  fflush(stdout);
   dh::safe_cuda(cudaDeviceSynchronize());
 }
 
