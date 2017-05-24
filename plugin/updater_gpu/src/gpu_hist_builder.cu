@@ -579,7 +579,6 @@ void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
   // asynch reduce per device
   std::vector<std::future<gpu_gpair>> future_results(n_devices);
   for(int device_idx=0;device_idx<n_devices;device_idx++){
-    dh::safe_cuda(cudaSetDevice(device_idx));
     
     auto begin        = device_gpair[device_idx].tbegin();
     auto end          = device_gpair[device_idx].tend();
@@ -590,6 +589,7 @@ void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
     // use std::launch::async to ensure the creation of a new thread
     future_results[device_idx] = std::async(std::launch::async, [=]
                                                          {
+                                                           dh::safe_cuda(cudaSetDevice(device_idx));
                                                            return thrust::reduce(begin, end, init, binary_op);
                                                          });
   }
@@ -802,11 +802,17 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
     dh::Timer time;
     this->BuildHist(depth);
     elapsed+=time.elapsed();
-    printf("depth=%d ",depth);
-    time.printElapsed("BuildHist Time");
+    printf("depth=%d\n",depth);
+    time.printElapsed("BH Time");
+    dh::Timer timesplit;
     this->FindSplit(depth);
+    timesplit.printElapsed("FS Time");
+    dh::Timer timestree;
     this->SynchronizeTree(depth);
+    timestree.printElapsed("ST Time");
+    dh::Timer timeupdatepos;
     this->UpdatePosition(depth);
+    timeupdatepos.printElapsed("UP Time");
   }
   printf("Total BuildHist Time=%lld\n",elapsed);
   int master_device=0;
