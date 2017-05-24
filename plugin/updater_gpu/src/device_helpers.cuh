@@ -468,12 +468,26 @@ inline size_t available_memory(int device_idx) {
 }
 
 
+  
 inline int n_visible_devices() {
   int n_visgpus = 0;
  
   cudaGetDeviceCount(&n_visgpus);
 
   return n_visgpus;
+}
+
+inline int n_devices_all(int n_gpus) {
+  int n_devices_visible = dh::n_visible_devices();
+  int n_devices = n_gpus < 0 ? n_devices_visible : n_gpus;
+  return(n_devices);
+}
+inline int n_devices(int n_gpus, int num_rows) {
+  int n_devices_visible = dh::n_visible_devices();
+  int n_devices = n_gpus < 0 ? n_devices_visible : n_gpus;
+  // fix-up device number to be limited by number of rows
+  n_devices = n_devices > num_rows ? num_rows : n_devices;
+  return(n_devices);
 }
 
   // if n_devices=-1, then use all visible devices

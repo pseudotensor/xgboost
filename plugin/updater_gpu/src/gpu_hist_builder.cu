@@ -14,6 +14,8 @@
 #include "device_helpers.cuh"
 #include "gpu_hist_builder.cuh"
 
+#define _NCCL 1
+
 namespace xgboost {
 namespace tree {
 
@@ -74,10 +76,10 @@ GPUHistBuilder::GPUHistBuilder()
       prediction_cache_initialised(false) {}
 
 GPUHistBuilder::~GPUHistBuilder() {
-  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
-
+#ifdef _NCCL
   for(int i=0; i<n_devices; ++i)
     ncclCommDestroy(comms[i]);
+#endif
   
 }
 
@@ -89,7 +91,7 @@ void GPUHistBuilder::Init(const TrainParam& param) {
 
   //  dh::safe_cuda(cudaSetDevice(param.gpu_id));
   CHECK(param.n_gpus!=0) << "Must have at least one device";
-  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
+  int n_devices_all = dh::n_devices_all(param.n_gpus);
   for(int device_idx=0;device_idx<n_devices;device_idx++){
     if (!param.silent) {
       size_t free_memory = dh::available_memory(device_idx);
@@ -101,23 +103,23 @@ void GPUHistBuilder::Init(const TrainParam& param) {
   CHECK_LE(param.n_gpus,dh::n_visible_devices()) << "Specify number of GPUs to be less or equal to number of visible GPU devices.";
 
 }
-  void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
+void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
                               DMatrix& fmat,  // NOLINT
                               const RegTree& tree) {
 
-  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
+  // set member num_rows and n_devices for rest of GPUHistBuilder members
   info = &fmat.info();
-  bst_uint num_rows = info->num_row;
-  n_devices = n_devices > num_rows ? num_rows : n_devices;
-
-
+  num_rows = info->num_row;
+  n_devices = dh::n_devices(param.n_gpus,num_rows);
+  
 
   if (!initialised) {
 
+#ifdef _NCCL
     // initialize nccl
     std::vector<int> dList(n_devices);
     for (int i = 0; i < n_devices; ++i)
-      dList[i] = i; // TODO: overload each GPU % nVis
+      dList[i] = i;
 
     comms.resize(n_devices);
     dh::safe_nccl(ncclCommInitAll(comms.data(), n_devices, dList.data())); // initialize communicator (One communicator per process)
@@ -132,7 +134,7 @@ void GPUHistBuilder::Init(const TrainParam& param) {
       printf("#   Rank %2d uses device %2d [0x%02x] %s\n", rank, cudaDev,
              prop.pciBusID, prop.name); fflush(stdout);
     }
-    
+#endif    
     
     CHECK(fmat.SingleColBlock()) << "grow_gpu_hist: must have single column "
                                     "block. Try setting 'tree_method' "
@@ -212,7 +214,7 @@ void GPUHistBuilder::Init(const TrainParam& param) {
       bst_uint num_elements_segment = device_element_segments[device_idx+1]-device_element_segments[device_idx];
       ba.allocate(device_idx,
                   &(hist_vec[device_idx].data),n_nodes(param.max_depth - 1) * n_bins,
-                  &left_child_smallest[device_idx], n_nodes(param.max_depth - 1),
+                  &left_child_smallest[device_idx], n_nodes(param.max_depth),
                   &nodes[device_idx], n_nodes(param.max_depth),
                   &prediction_cache[device_idx], num_rows_segment,
                   &position[device_idx], num_rows_segment,
@@ -283,7 +285,6 @@ void GPUHistBuilder::BuildHist(int depth) {
 
   dh::Timer time;
   
-  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
 #if(1)
   for(int device_idx=0;device_idx<n_devices;device_idx++){
     size_t begin = device_element_segments[device_idx];
@@ -366,6 +367,7 @@ void GPUHistBuilder::BuildHist(int depth) {
 
   time.printElapsed("Reduce-Add Time");
 
+  dh::safe_cuda(cudaSetDevice(master_device));
   
   // Subtraction trick
   auto hist_builder = hist_vec[master_device].GetBuilder();
@@ -386,6 +388,7 @@ void GPUHistBuilder::BuildHist(int depth) {
       hist_builder.Add(parent - other, gidx, nidx);
     });
   }
+  fflush(stdout);
   dh::safe_cuda(cudaDeviceSynchronize());
 }
 
@@ -580,9 +583,7 @@ void GPUHistBuilder::SynchronizeTree(int depth) {
   int master_device=0;
   dh::safe_cuda(cudaSetDevice(master_device));
 
-  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
-
-  
+ 
   for(int device_idx=0;device_idx<n_devices;device_idx++){
     if(device_idx==master_device) continue;
 
@@ -657,8 +658,6 @@ void GPUHistBuilder::UpdatePosition(int depth) {
 
 void GPUHistBuilder::UpdatePositionDense(int depth) {
 
-  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
-
   for(int device_idx=0;device_idx<n_devices;device_idx++){
     dh::safe_cuda(cudaSetDevice(device_idx));
 
@@ -697,8 +696,6 @@ void GPUHistBuilder::UpdatePositionDense(int depth) {
 }
 
 void GPUHistBuilder::UpdatePositionSparse(int depth) {
-
-  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
 
   for(int device_idx=0;device_idx<n_devices;device_idx++){
     dh::safe_cuda(cudaSetDevice(device_idx));
@@ -801,8 +798,6 @@ bool GPUHistBuilder::UpdatePredictionCache(
     return false;
   }
 
-
-  int n_devices = param.n_gpus < 0 ? dh::n_visible_devices() : param.n_gpus;
 
   if (!prediction_cache_initialised) {
     for(int device_idx=0;device_idx<n_devices;device_idx++){

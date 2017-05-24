@@ -101,6 +101,9 @@ class GPUHistBuilder {
   dh::dvec<int> feature_flags;
   bool prediction_cache_initialised;
 
+  bst_uint num_rows;
+  int n_devices;
+
   std::vector<dh::dvec<bst_float>> prediction_cache;
   std::vector<dh::dvec<float>> gidx_fvalue_map;
   std::vector<dh::dvec<int>> gidx_feature_map;
