@@ -118,8 +118,10 @@ class GPUHistBuilder {
   std::vector<int> device_row_segments;
   std::vector<int> device_element_segments;
   std::vector<DeviceHist> hist_vec;
-  std::vector<ncclComm_t> comms;
   std::vector<cudaStream_t*> streams;
+#ifdef _NCCL
+  std::vector<ncclComm_t> comms;
+#endif
 };
 }  // namespace tree
 }  // namespace xgboost

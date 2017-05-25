@@ -363,19 +363,20 @@ void GPUHistBuilder::BuildHist(int depth) {
 
   // reduce each element of histogram across multiple gpus
   int master_device=dList[0];
+#ifdef _NCCL
+#else  
   dh::safe_cuda(cudaSetDevice(master_device));
+#endif
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
-    auto master_hist_data = hist_vec[master_device].GetLevelPtr(depth);
-    auto slave_hist_data = hist_vec[d_idx].GetLevelPtr(depth);
-    size_t count_bytes = hist_temp.LevelSize(depth)*sizeof(gpu_gpair);
-
-    //#ifdef _NCCL
-#if(1)
+#ifdef _NCCL
     dh::safe_cuda(cudaSetDevice(device_idx));
     ncclReduce((const void*)hist_vec[d_idx].GetLevelPtr(depth),(void*)hist_vec[d_idx].GetLevelPtr(depth),hist_vec[d_idx].LevelSize(depth)*sizeof(gpu_gpair)/sizeof(float), ncclFloat, ncclSum, master_device, comms[d_idx],*(streams[d_idx]));
   
 #else
+    auto master_hist_data = hist_vec[master_device].GetLevelPtr(depth);
+    auto slave_hist_data = hist_vec[d_idx].GetLevelPtr(depth);
+    size_t count_bytes = hist_temp.LevelSize(depth)*sizeof(gpu_gpair);
     auto temp_hist_data = hist_temp.GetLevelPtr(depth);
     if(device_idx==master_device) continue;
 
@@ -387,10 +388,7 @@ void GPUHistBuilder::BuildHist(int depth) {
     dh::safe_cuda(cudaDeviceSynchronize());
 #endif
   }
-  fflush(stdout);
-  time.printElapsed("Reduce-Add Time");
 
-  dh::safe_cuda(cudaSetDevice(master_device)); // Apparently required, unsure why
 
 #ifdef _NCCL
   for(int d_idx=0;d_idx<n_devices;d_idx++){
@@ -398,8 +396,11 @@ void GPUHistBuilder::BuildHist(int depth) {
     dh::safe_cuda(cudaSetDevice(device_idx));
     dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
   }
+#else
+  dh::safe_cuda(cudaSetDevice(master_device)); // Apparently required, unsure why
 #endif
   
+  time.printElapsed("Reduce-Add Time");
   
   // Subtraction trick
   auto hist_builder = hist_vec[master_device].GetBuilder();

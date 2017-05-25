@@ -97,6 +97,7 @@ if(PLUGIN_UPDATER_GPU)
 	#Find cub
 	set(CUB_DIRECTORY "" CACHE PATH "CUB 1.5.4 directory")
 	include_directories(${CUB_DIRECTORY})
+    #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;-arch=compute_35;-lineinfo;-D_NCCL=1")
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;-arch=compute_35;-lineinfo;")
     if(NOT MSVC)
         set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-Xcompiler -fPIC")
