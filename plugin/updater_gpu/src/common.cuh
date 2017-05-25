@@ -152,7 +152,7 @@ inline void dense2sparse_tree(RegTree* p_tree,
   auto d_gpair = gpair.data();
   dh::BernoulliRng rng(subsample, common::GlobalRandom()());
 
-  dh::launch_n(gpair.size(), [=] __device__(int i) {
+  dh::launch_n(gpair.device_idx(), gpair.size(), [=] __device__(int i) {
     if (!rng(i)) {
       d_gpair[i] = gpu_gpair();
     }

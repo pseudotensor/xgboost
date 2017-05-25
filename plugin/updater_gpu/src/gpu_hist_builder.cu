@@ -307,8 +307,6 @@ void GPUHistBuilder::BuildHist(int depth) {
     size_t end = device_element_segments[d_idx+1];
     size_t row_begin = device_row_segments[d_idx];
     
-    dh::safe_cuda(cudaSetDevice(device_idx));
-
     auto d_ridx = device_matrix[d_idx].ridx.data();
     auto d_gidx = device_matrix[d_idx].gidx.data();
     auto d_position = position[d_idx].data();
@@ -316,7 +314,7 @@ void GPUHistBuilder::BuildHist(int depth) {
     auto d_left_child_smallest = left_child_smallest[d_idx].data();
     auto hist_builder = hist_vec[d_idx].GetBuilder();
     
-    dh::launch_n(end-begin, [=] __device__(int local_idx) {
+    dh::launch_n(device_idx, end-begin, [=] __device__(int local_idx) {
         
         int ridx = d_ridx[local_idx];
         int pos = d_position[ridx-row_begin];
@@ -363,10 +361,6 @@ void GPUHistBuilder::BuildHist(int depth) {
 
   // reduce each element of histogram across multiple gpus
   int master_device=dList[0];
-#ifdef _NCCL
-#else  
-  dh::safe_cuda(cudaSetDevice(master_device));
-#endif
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
 #ifdef _NCCL
@@ -382,7 +376,7 @@ void GPUHistBuilder::BuildHist(int depth) {
 
     cudaMemcpyPeer(temp_hist_data,master_device,slave_hist_data,device_idx,count_bytes);
     
-    dh::launch_n(hist_vec[master_device].LevelSize(depth), [=] __device__(int idx) {
+    dh::launch_n(master_device, hist_vec[master_device].LevelSize(depth), [=] __device__(int idx) {
         master_hist_data[idx] += temp_hist_data[idx];
       });
     dh::safe_cuda(cudaDeviceSynchronize());
@@ -402,12 +396,11 @@ void GPUHistBuilder::BuildHist(int depth) {
   time.printElapsed("Reduce-Add Time");
   
   // Subtraction trick
-  dh::safe_cuda(cudaSetDevice(master_device));
   auto hist_builder = hist_vec[master_device].GetBuilder();
   auto d_left_child_smallest = left_child_smallest[master_device].data();
   int n_sub_bins = (n_nodes_level(depth) / 2) * hist_builder.n_bins;
   if (depth > 0) {
-    dh::launch_n(n_sub_bins, [=] __device__(int idx) {
+    dh::launch_n(master_device, n_sub_bins, [=] __device__(int idx) {
       int nidx = n_nodes(depth - 1) + ((idx / hist_builder.n_bins) * 2);
       bool left_smallest = d_left_child_smallest[parent_nidx(nidx)];
       if (left_smallest) {
@@ -669,9 +662,7 @@ void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
   auto d_nodes = nodes[master_device].data();
   auto gpu_param_alias = gpu_param;
   
-  dh::safe_cuda(cudaSetDevice(master_device));
-  
-  dh::launch_n(1, [=] __device__(int idx) {
+  dh::launch_n(master_device, 1, [=] __device__(int idx) {
     gpu_gpair sum_gradients = sum;
     d_nodes[idx] = Node(
         sum_gradients,
@@ -693,8 +684,6 @@ void GPUHistBuilder::UpdatePositionDense(int depth) {
 
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
-    dh::safe_cuda(cudaSetDevice(device_idx));
-
 
     auto d_position = position[d_idx].data();
     Node* d_nodes = nodes[d_idx].data();
@@ -704,7 +693,7 @@ void GPUHistBuilder::UpdatePositionDense(int depth) {
     size_t begin = device_row_segments[d_idx];
     size_t end = device_row_segments[d_idx+1];
     
-    dh::launch_n(end-begin, [=] __device__(int local_idx) { // TODO: add device_idx and put set inside
+    dh::launch_n(device_idx, end-begin, [=] __device__(int local_idx) { // TODO: add device_idx and put set inside
 	    NodeIdT pos = d_position[local_idx];
 	    if (!is_active(pos, depth)) {
 	      return;
@@ -733,7 +722,6 @@ void GPUHistBuilder::UpdatePositionSparse(int depth) {
 
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
-    dh::safe_cuda(cudaSetDevice(device_idx));
     
     auto d_position = position[d_idx].data();
     auto d_position_tmp = position_tmp[d_idx].data();
@@ -749,7 +737,7 @@ void GPUHistBuilder::UpdatePositionSparse(int depth) {
     size_t element_end = device_element_segments[d_idx+1];
 
     // Update missing direction
-    dh::launch_n(row_end - row_begin, [=] __device__(int local_idx) {
+    dh::launch_n(device_idx, row_end - row_begin, [=] __device__(int local_idx) {
         NodeIdT pos = d_position[local_idx];
         if (!is_active(pos, depth)) {
           d_position_tmp[local_idx] = pos;
@@ -770,7 +758,7 @@ void GPUHistBuilder::UpdatePositionSparse(int depth) {
 
 
     // Update node based on fvalue where exists
-    dh::launch_n(element_end - element_begin, [=] __device__(int local_idx) {
+    dh::launch_n(device_idx, element_end - element_begin, [=] __device__(int local_idx) {
         int ridx = d_ridx[local_idx];
         NodeIdT pos = d_position[ridx-row_begin];
         if (!is_active(pos, depth)) {
@@ -858,7 +846,7 @@ bool GPUHistBuilder::UpdatePredictionCache(
     auto d_position = position[d_idx].data();
     auto d_prediction_cache = prediction_cache[d_idx].data();
 
-    dh::launch_n(prediction_cache[d_idx].size(), [=] __device__(int local_idx) {
+    dh::launch_n(device_idx, prediction_cache[d_idx].size(), [=] __device__(int local_idx) {
         int pos = d_position[local_idx];
         d_prediction_cache[local_idx] += d_nodes[pos].weight * eps;
       });

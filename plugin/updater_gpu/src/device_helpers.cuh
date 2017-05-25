@@ -586,7 +586,8 @@ __global__ void launch_n_kernel(int device_idx, size_t begin, size_t end, L lamb
 }
 
 template <int ITEMS_PER_THREAD = 8, int BLOCK_THREADS = 256, typename L>
-inline void launch_n(size_t n, L lambda) {
+inline void launch_n(int device_idx, size_t n, L lambda) {
+  safe_cuda(cudaSetDevice(device_idx));
   const int GRID_SIZE = div_round_up(n, ITEMS_PER_THREAD * BLOCK_THREADS);
 #if defined(__CUDACC__)
   launch_n_kernel<<<GRID_SIZE, BLOCK_THREADS>>>(static_cast<size_t>(0),n, lambda);

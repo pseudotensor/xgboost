@@ -84,7 +84,7 @@ void colsample_level(GPUData *data, const TrainParam xgboost_param,
   auto d_feature_set = data->feature_set.data();
   auto d_feature_flags = data->feature_flags.data();
 
-  dh::launch_n(
+  dh::launch_n(data->feature_flags.device_idx(),
       n, [=] __device__(int i) { d_feature_flags[d_feature_set[i]] = 1; });
 }
 

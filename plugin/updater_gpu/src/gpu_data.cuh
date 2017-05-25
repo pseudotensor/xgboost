@@ -136,7 +136,7 @@ struct GPUData {
     auto d_node_id_instance = node_id_instance.data();
     auto d_instance_id = instance_id.data();
 
-    dh::launch_n(fvalues.size(), [=] __device__(bst_uint i) {
+    dh::launch_n(node_id.device_idx(), fvalues.size(), [=] __device__(bst_uint i) {
       d_node_id[i] = d_node_id_instance[d_instance_id[i]];
     });
   }

@@ -42,7 +42,7 @@ void GPUBuilder::UpdateNodeId(int level) {
   auto* d_node_id_instance = gpu_data->node_id_instance.data();
   Node* d_nodes = gpu_data->nodes.data();
 
-  dh::launch_n(gpu_data->node_id_instance.size(), [=] __device__(int i) {
+  dh::launch_n(gpu_data->node_id_instance.device_idx(), gpu_data->node_id_instance.size(), [=] __device__(int i) {
     NodeIdT item_node_id = d_node_id_instance[i];
 
     if (item_node_id < 0) {
@@ -68,7 +68,7 @@ void GPUBuilder::UpdateNodeId(int level) {
   auto* d_feature_id = gpu_data->feature_id.data();
 
   // Update node based on fvalue where exists
-  dh::launch_n(gpu_data->fvalues.size(), [=] __device__(int i) {
+  dh::launch_n(gpu_data->fvalues.device_idx(), gpu_data->fvalues.size(), [=] __device__(int i) {
     NodeIdT item_node_id = d_node_id[i];
 
     if (item_node_id < 0) {
