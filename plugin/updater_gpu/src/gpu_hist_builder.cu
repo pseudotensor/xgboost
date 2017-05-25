@@ -397,12 +397,12 @@ void GPUHistBuilder::BuildHist(int depth) {
     dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
   }
 #else
-  dh::safe_cuda(cudaSetDevice(master_device)); // Apparently required, unsure why
 #endif
   
   time.printElapsed("Reduce-Add Time");
   
   // Subtraction trick
+  dh::safe_cuda(cudaSetDevice(master_device));
   auto hist_builder = hist_vec[master_device].GetBuilder();
   auto d_left_child_smallest = left_child_smallest[master_device].data();
   int n_sub_bins = (n_nodes_level(depth) / 2) * hist_builder.n_bins;
