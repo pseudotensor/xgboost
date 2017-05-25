@@ -606,14 +606,24 @@ void GPUHistBuilder::FindSplitSpecialize(int depth) {
 
 void GPUHistBuilder::SynchronizeTree(int depth) {
   int master_device=dList[0];
-  dh::safe_cuda(cudaSetDevice(master_device));
 
+  
+  //  dh::safe_cuda(cudaSetDevice(master_device));
  
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
-    if(device_idx==master_device) continue;
 
     
+#ifdef _NCCL
+
+    dh::safe_cuda(cudaSetDevice(device_idx));
+    ncclBcast(nodes[d_idx].data() + n_nodes(depth-1),n_nodes_level(depth)*sizeof(Node)/sizeof(char), ncclChar, master_device,comms[d_idx],*(streams[d_idx]));
+
+    ncclBcast(left_child_smallest[d_idx].data() + n_nodes(depth-1),n_nodes_level(depth)*sizeof(bool)/sizeof(char), ncclChar, master_device,comms[d_idx],*(streams[d_idx]));
+
+#else
+    if(device_idx==master_device) continue;
+
     auto master_node_data = nodes[master_device].data() + n_nodes(depth-1);
     auto slave_node_data = nodes[d_idx].data() + n_nodes(depth-1);
     int node_count_bytes = n_nodes_level(depth)*sizeof(Node);
@@ -625,8 +635,18 @@ void GPUHistBuilder::SynchronizeTree(int depth) {
     int left_child_smallest_count_bytes = n_nodes_level(depth)*sizeof(bool);
 
     cudaMemcpyPeerAsync(slave_left_child_smallest_data,device_idx,master_left_child_smallest_data,master_device,left_child_smallest_count_bytes);
+#endif
   }
-  
+
+#ifdef _NCCL
+  for(int d_idx=0;d_idx<n_devices;d_idx++){
+    int device_idx = dList[d_idx];
+    dh::safe_cuda(cudaSetDevice(device_idx));
+    dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
+  }
+#else
+#endif
+
 
 }
 
