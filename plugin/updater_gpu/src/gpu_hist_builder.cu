@@ -362,6 +362,7 @@ void GPUHistBuilder::BuildHist(int depth) {
 
   // reduce each element of histogram across multiple gpus
   int master_device=dList[0];
+  dh::safe_cuda(cudaSetDevice(master_device));
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
     auto master_hist_data = hist_vec[master_device].GetLevelPtr(depth);
