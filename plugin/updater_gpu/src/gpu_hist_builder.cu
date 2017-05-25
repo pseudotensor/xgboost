@@ -568,38 +568,31 @@ void GPUHistBuilder::FindSplit(int depth) {
 
 template <>
 void GPUHistBuilder::FindSplitSpecialize<MAX_BLOCK_THREADS>(int depth) {
+  LaunchFindSplit<MAX_BLOCK_THREADS>(depth);
+}
+template <int BLOCK_THREADS>
+void GPUHistBuilder::FindSplitSpecialize(int depth) {
+  if (param.max_bin <= BLOCK_THREADS) {
+    LaunchFindSplit<BLOCK_THREADS>(depth);
+  } else {
+    this->FindSplitSpecialize<BLOCK_THREADS + 32>(depth);
+  }
+
+}
+
+  template <int BLOCK_THREADS>
+void GPUHistBuilder::LaunchFindSplit(int depth){
   int master_device=dList[0];
-  
+
   const int GRID_SIZE = n_nodes_level(depth);
   bool colsample =
       param.colsample_bylevel < 1.0 || param.colsample_bytree < 1.0;
 
-  find_split_kernel<
-      MAX_BLOCK_THREADS><<<GRID_SIZE, MAX_BLOCK_THREADS>>>(
-      hist_vec[master_device].GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
-      hmat_.row_ptr.back(), nodes[master_device].data(), fidx_min_map.data(),
-      gidx_fvalue_map[master_device].data(), gpu_param, left_child_smallest[master_device].data(), colsample,
-      feature_flags.data());
-
-  dh::safe_cuda(cudaDeviceSynchronize());
-}
-template <int BLOCK_THREADS>
-void GPUHistBuilder::FindSplitSpecialize(int depth) {
-  int master_device=dList[0];
-
-  if (param.max_bin <= BLOCK_THREADS) {
-    const int GRID_SIZE = n_nodes_level(depth);
-    bool colsample =
-        param.colsample_bylevel < 1.0 || param.colsample_bytree < 1.0;
-
-    find_split_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>(
-        hist_vec[master_device].GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
-        hmat_.row_ptr.back(), nodes[master_device].data(), fidx_min_map.data(),
-        gidx_fvalue_map[master_device].data(), gpu_param, left_child_smallest[master_device].data(),
-        colsample, feature_flags.data());
-  } else {
-    this->FindSplitSpecialize<BLOCK_THREADS + 32>(depth);
-  }
+  find_split_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>(
+    hist_vec[master_device].GetLevelPtr(depth), feature_segments.data(), depth, info->num_col,
+    hmat_.row_ptr.back(), nodes[master_device].data(), fidx_min_map.data(),
+    gidx_fvalue_map[master_device].data(), gpu_param, left_child_smallest[master_device].data(),
+    colsample, feature_flags.data());
 
   dh::safe_cuda(cudaDeviceSynchronize());
 }
@@ -620,6 +613,8 @@ void GPUHistBuilder::SynchronizeTree(int depth) {
     ncclBcast(nodes[d_idx].data() + n_nodes(depth-1),n_nodes_level(depth)*sizeof(Node)/sizeof(char), ncclChar, master_device,comms[d_idx],*(streams[d_idx]));
 
     ncclBcast(left_child_smallest[d_idx].data() + n_nodes(depth-1),n_nodes_level(depth)*sizeof(bool)/sizeof(char), ncclChar, master_device,comms[d_idx],*(streams[d_idx]));
+
+    // Becomes all-gather if split is multi-GPU
 
 #else
     if(device_idx==master_device) continue;

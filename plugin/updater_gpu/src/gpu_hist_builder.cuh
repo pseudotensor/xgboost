@@ -67,6 +67,8 @@ class GPUHistBuilder {
   void SynchronizeTree(int depth);
   template <int BLOCK_THREADS>
   void FindSplitSpecialize(int depth);
+  template <int BLOCK_THREADS>
+  void LaunchFindSplit(int depth);
   void InitFirstNode(const std::vector<bst_gpair> &gpair);
   void UpdatePosition(int depth);
   void UpdatePositionDense(int depth);
