@@ -64,7 +64,6 @@ class GPUHistBuilder {
               RegTree *p_tree);
   void BuildHist(int depth);
   void FindSplit(int depth);
-  void SynchronizeTree(int depth);
   template <int BLOCK_THREADS>
   void FindSplitSpecialize(int depth);
   template <int BLOCK_THREADS>
@@ -85,41 +84,43 @@ class GPUHistBuilder {
   MetaInfo *info;
   bool initialised;
   bool is_dense;
-  std::vector<DeviceGMat> device_matrix;
   const DMatrix *p_last_fmat_;
 
   // choose which memory type to use (DEVICE or DEVICE_MANAGED)
   dh::bulk_allocator<dh::memory_type::DEVICE> ba;
   //dh::bulk_allocator<dh::memory_type::DEVICE_MANAGED> ba;
   dh::CubMemory cub_mem;
-  dh::dvec<int> hist_node_segments;
-  dh::dvec<int> feature_segments;
-  dh::dvec<float> gain;
-  dh::dvec<float> fidx_min_map;
-  DeviceHist hist_temp;
-  dh::dvec<cub::KeyValuePair<int, float>> argmax;
-  dh::dvec<gpu_gpair> node_sums;
-  dh::dvec<gpu_gpair> hist_scan;
-  dh::dvec<int> feature_flags;
+
   bool prediction_cache_initialised;
+
+  std::vector<int> feature_set_tree;
+  std::vector<int> feature_set_level;
 
   bst_uint num_rows;
   int n_devices;
-  std::vector<int> dList;
 
-  std::vector<dh::dvec<bst_float>> prediction_cache;
-  std::vector<dh::dvec<float>> gidx_fvalue_map;
-  std::vector<dh::dvec<int>> gidx_feature_map;
-  std::vector<dh::dvec<NodeIdT>> position;
-  std::vector<dh::dvec<NodeIdT>> position_tmp;
-  std::vector<dh::dvec<gpu_gpair>> device_gpair;
-  std::vector<dh::dvec<Node>> nodes;
-  std::vector<dh::dvec<bool>> left_child_smallest;
-  std::vector<int> feature_set_tree;
-  std::vector<int> feature_set_level;
+  // below vectors are for each devices used
+  std::vector<int> dList;
   std::vector<int> device_row_segments;
   std::vector<int> device_element_segments;
+
   std::vector<DeviceHist> hist_vec;
+  std::vector<dh::dvec<Node>> nodes;
+  std::vector<dh::dvec<Node>> nodes_temp;
+  std::vector<dh::dvec<Node>> nodes_child_temp;
+  std::vector<dh::dvec<bool>> left_child_smallest;
+  std::vector<dh::dvec<bool>> left_child_smallest_temp;
+  std::vector<dh::dvec<int>> feature_flags;
+  std::vector<dh::dvec<float>> fidx_min_map;
+  std::vector<dh::dvec<int>> feature_segments;
+  std::vector<dh::dvec<bst_float>> prediction_cache;
+  std::vector<dh::dvec<NodeIdT>> position;
+  std::vector<dh::dvec<NodeIdT>> position_tmp;
+  std::vector<DeviceGMat> device_matrix;
+  std::vector<dh::dvec<gpu_gpair>> device_gpair;
+  std::vector<dh::dvec<int>> gidx_feature_map;
+  std::vector<dh::dvec<float>> gidx_fvalue_map;
+
   std::vector<cudaStream_t*> streams;
 #ifdef _NCCL
   std::vector<ncclComm_t> comms;
