@@ -273,6 +273,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     initialised = true;
   }
 
+  fprintf(stderr,"PTR-A: %p %p\n",hist_vec[0].GetLevelPtr(0),hist_temp.GetLevelPtr(0)); fflush(stderr);
 
   // shard rows onto gpus
   for(int d_idx=0;d_idx<n_devices;d_idx++){
@@ -298,7 +299,10 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
 void GPUHistBuilder::BuildHist(int depth) {
 
   dh::Timer time;
-  
+
+  fprintf(stderr,"PTR8: %p %p\n",hist_vec[0].GetLevelPtr(depth),hist_temp.GetLevelPtr(depth)); fflush(stderr);
+
+  /*
 #if(1)
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
@@ -353,12 +357,13 @@ void GPUHistBuilder::BuildHist(int depth) {
   });
  
 #endif
-
+  */
   //  dh::safe_cuda(cudaDeviceSynchronize());
   dh::synchronize_n_devices(n_devices, dList);
 
   time.printElapsed("Add Time");
 
+  fprintf(stderr,"PTR9: %p %p\n",hist_vec[0].GetLevelPtr(depth),hist_temp.GetLevelPtr(depth)); fflush(stderr);
 
   // reduce each element of histogram across multiple gpus
   int master_device=dList[0];
@@ -375,10 +380,13 @@ void GPUHistBuilder::BuildHist(int depth) {
     ncclReduce((const void*)hist_vec[d_idx].GetLevelPtr(depth),(void*)hist_vec[d_idx].GetLevelPtr(depth),hist_vec[d_idx].LevelSize(depth), gpu_gpair, ncclSum, master_device, comms[d_idx]);
   
 #else
+    dh::safe_cuda(cudaSetDevice(device_idx));
     auto temp_hist_data = hist_temp.GetLevelPtr(depth);
     if(device_idx==master_device) continue;
 
-    cudaMemcpyPeer(temp_hist_data,master_device,slave_hist_data,device_idx,count_bytes);
+    //    cudaMemcpyPeer(temp_hist_data,master_device,slave_hist_data,device_idx,count_bytes);
+
+    fprintf(stderr,"PTR10 %d: %p %p\n",device_idx,hist_vec[0].GetLevelPtr(depth),hist_temp.GetLevelPtr(depth)); fflush(stderr);
     
     dh::launch_n(hist_vec[master_device].LevelSize(depth), [=] __device__(int idx) {
 
@@ -680,6 +688,8 @@ void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
         CalcWeight(gpu_param_alias, sum_gradients.grad(),
                    sum_gradients.hess()));
   });
+  dh::safe_cuda(cudaDeviceSynchronize());
+
 }
 
 void GPUHistBuilder::UpdatePosition(int depth) {
@@ -878,12 +888,15 @@ bool GPUHistBuilder::UpdatePredictionCache(
 void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
                             DMatrix* p_fmat, RegTree* p_tree) {
   this->InitData(gpair, *p_fmat, *p_tree);
-  this->InitFirstNode(gpair); // only creates first node on master, which is used by FindSplit (currently only on master)
-  this->ColSampleTree();
+  fprintf(stderr,"PTRA: %p %p\n",hist_vec[0].GetLevelPtr(0),hist_temp.GetLevelPtr(0)); fflush(stderr);
+  //  this->InitFirstNode(gpair); // only creates first node on master, which is used by FindSplit (currently only on master)
+  //  this->ColSampleTree();
   long long int elapsed=0;
   for (int depth = 0; depth < param.max_depth; depth++) {
-    this->ColSampleLevel();
+    fprintf(stderr,"PTRB: %p %p\n",hist_vec[0].GetLevelPtr(depth),hist_temp.GetLevelPtr(depth)); fflush(stderr);
+    //this->ColSampleLevel();
     dh::Timer time;
+    fprintf(stderr,"PTRC: %p %p\n",hist_vec[0].GetLevelPtr(depth),hist_temp.GetLevelPtr(depth)); fflush(stderr);
     this->BuildHist(depth);
     elapsed+=time.elapsed();
     printf("depth=%d\n",depth);
