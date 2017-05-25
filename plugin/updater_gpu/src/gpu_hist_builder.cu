@@ -14,7 +14,7 @@
 #include "device_helpers.cuh"
 #include "gpu_hist_builder.cuh"
 
-//#define _NCCL 1
+#define _NCCL 1
 
 namespace xgboost {
 namespace tree {
@@ -81,7 +81,7 @@ GPUHistBuilder::~GPUHistBuilder() {
     {
       ncclCommDestroy(comms[d_idx]);
       dh::safe_cuda(cudaSetDevice(dList[d_idx]));
-      dh::safe_cuda(cudaStreamDestroy(s[d_idx]));
+      dh::safe_cuda(cudaStreamDestroy(*(streams[d_idx])));
     }
 #endif
   
@@ -133,6 +133,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     printf("# NCCL: Using devices\n");
     for (int d_idx = 0; d_idx < n_devices; ++d_idx) {
 
+      streams[d_idx] = (cudaStream_t*)malloc(sizeof(cudaStream_t));
       dh::safe_cuda(cudaSetDevice(dList[d_idx]));
       dh::safe_cuda(cudaStreamCreate(streams[d_idx]));
       
@@ -368,12 +369,11 @@ void GPUHistBuilder::BuildHist(int depth) {
     auto master_hist_data = hist_vec[master_device].GetLevelPtr(depth);
     auto slave_hist_data = hist_vec[d_idx].GetLevelPtr(depth);
     size_t count_bytes = hist_temp.LevelSize(depth)*sizeof(gpu_gpair);
-    fprintf(stderr,"device_idx=%d count_bytes=%zu counts=%d %d\n",device_idx,count_bytes,hist_vec[master_device].LevelSize(depth),hist_vec[d_idx].LevelSize(depth)); fflush(stderr);
 
     //#ifdef _NCCL
-#if(0)
+#if(1)
     dh::safe_cuda(cudaSetDevice(device_idx));
-    ncclReduce((const void*)hist_vec[d_idx].GetLevelPtr(depth),(void*)hist_vec[d_idx].GetLevelPtr(depth),hist_vec[d_idx].LevelSize(depth), gpu_gpair, ncclSum, master_device, comms[d_idx]);
+    ncclReduce((const void*)hist_vec[d_idx].GetLevelPtr(depth),(void*)hist_vec[d_idx].GetLevelPtr(depth),hist_vec[d_idx].LevelSize(depth)*sizeof(gpu_gpair)/sizeof(float), ncclFloat, ncclSum, master_device, comms[d_idx],*(streams[d_idx]));
   
 #else
     auto temp_hist_data = hist_temp.GetLevelPtr(depth);
@@ -382,10 +382,7 @@ void GPUHistBuilder::BuildHist(int depth) {
     cudaMemcpyPeer(temp_hist_data,master_device,slave_hist_data,device_idx,count_bytes);
     
     dh::launch_n(hist_vec[master_device].LevelSize(depth), [=] __device__(int idx) {
-
-        printf("idx=%d\n",idx);
         master_hist_data[idx] += temp_hist_data[idx];
-        
       });
     dh::safe_cuda(cudaDeviceSynchronize());
 #endif
@@ -398,8 +395,8 @@ void GPUHistBuilder::BuildHist(int depth) {
 #ifdef _NCCL
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
-    CUDACHECK(cudaSetDevice(device_idx));
-    CUDACHECK(cudaStreamSynchronize(s[d_idx]));
+    dh::safe_cuda(cudaSetDevice(device_idx));
+    dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
   }
 #endif
   
