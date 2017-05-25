@@ -103,6 +103,7 @@ class GPUHistBuilder {
 
   bst_uint num_rows;
   int n_devices;
+  std::vector<int> dList;
 
   std::vector<dh::dvec<bst_float>> prediction_cache;
   std::vector<dh::dvec<float>> gidx_fvalue_map;
@@ -118,6 +119,7 @@ class GPUHistBuilder {
   std::vector<int> device_element_segments;
   std::vector<DeviceHist> hist_vec;
   std::vector<ncclComm_t> comms;
+  std::vector<cudaStream_t> streams;
 };
 }  // namespace tree
 }  // namespace xgboost

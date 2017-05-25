@@ -56,9 +56,7 @@ inline ncclResult_t throw_on_nccl_error(ncclResult_t code, const char *file,
 }
 
 
-  
-
-#define gpuErrchk(ans) \
+#define gpuErrchk(ans)                          \
   { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line,
                       bool abort = true) {
@@ -68,6 +66,51 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
     if (abort) exit(code);
   }
 }
+
+
+
+inline int n_visible_devices() {
+  int n_visgpus = 0;
+ 
+  cudaGetDeviceCount(&n_visgpus);
+
+  return n_visgpus;
+}
+
+inline int n_devices_all(int n_gpus) {
+  int n_devices_visible = dh::n_visible_devices();
+  int n_devices = n_gpus < 0 ? n_devices_visible : n_gpus;
+  return(n_devices);
+}
+inline int n_devices(int n_gpus, int num_rows) {
+  int n_devices_visible = dh::n_visible_devices();
+  int n_devices = n_gpus < 0 ? n_devices_visible : n_gpus;
+  // fix-up device number to be limited by number of rows
+  n_devices = n_devices > num_rows ? num_rows : n_devices;
+  return(n_devices);
+}
+
+  // if n_devices=-1, then use all visible devices
+inline void synchronize_n_devices(int n_devices, std::vector<int> dList) {
+  for(int d_idx=0;d_idx<n_devices;d_idx++){
+    int device_idx = dList[d_idx];
+    safe_cuda(cudaSetDevice(device_idx));
+    safe_cuda(cudaDeviceSynchronize());
+  }
+}
+inline void synchronize_all() {
+  for(int device_idx=0;device_idx<n_visible_devices();device_idx++){
+    safe_cuda(cudaSetDevice(device_idx));
+    safe_cuda(cudaDeviceSynchronize());
+  }
+}
+
+inline std::string device_name(int device_idx) {
+  cudaDeviceProp prop;
+  dh::safe_cuda(cudaGetDeviceProperties(&prop, device_idx));
+  return std::string(prop.name);
+}
+  
 
 /*
  *  Timers
@@ -162,13 +205,7 @@ struct Timer {
   void reset() { start = ClockT::now(); }
   int64_t elapsed() const { return (ClockT::now() - start).count(); }
   void printElapsed(std::string label) {
-    //    safe_cuda(cudaDeviceSynchronize());
-    int n_visgpus;
-    cudaGetDeviceCount(&n_visgpus);
-    for(int device_idx=0;device_idx<n_visgpus;device_idx++){
-      safe_cuda(cudaSetDevice(device_idx));
-      safe_cuda(cudaDeviceSynchronize());
-    }
+    //    synchronize_n_devices(n_devices, dList);
     printf("%s:\t %lld\n", label.c_str(), elapsed());
     reset();
   }
@@ -469,48 +506,6 @@ inline size_t available_memory(int device_idx) {
 
 
   
-inline int n_visible_devices() {
-  int n_visgpus = 0;
- 
-  cudaGetDeviceCount(&n_visgpus);
-
-  return n_visgpus;
-}
-
-inline int n_devices_all(int n_gpus) {
-  int n_devices_visible = dh::n_visible_devices();
-  int n_devices = n_gpus < 0 ? n_devices_visible : n_gpus;
-  return(n_devices);
-}
-inline int n_devices(int n_gpus, int num_rows) {
-  int n_devices_visible = dh::n_visible_devices();
-  int n_devices = n_gpus < 0 ? n_devices_visible : n_gpus;
-  // fix-up device number to be limited by number of rows
-  n_devices = n_devices > num_rows ? num_rows : n_devices;
-  return(n_devices);
-}
-
-  // if n_devices=-1, then use all visible devices
-inline void synchronize_n_devices(int n_devices) {
-  n_devices = n_devices<0 ? n_visible_devices() : n_devices;
- 
-  for(int device_idx=0;device_idx<n_devices;device_idx++){
-    safe_cuda(cudaSetDevice(device_idx));
-    safe_cuda(cudaDeviceSynchronize());
-  }
-}
-inline void synchronize_all() {
-  for(int device_idx=0;device_idx<n_visible_devices();device_idx++){
-    safe_cuda(cudaSetDevice(device_idx));
-    safe_cuda(cudaDeviceSynchronize());
-  }
-}
-
-inline std::string device_name(int device_idx) {
-  cudaDeviceProp prop;
-  dh::safe_cuda(cudaGetDeviceProperties(&prop, device_idx));
-  return std::string(prop.name);
-}
 
 /*
  *  Utility functions
