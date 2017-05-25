@@ -52,7 +52,7 @@ inline ncclResult_t throw_on_nccl_error(ncclResult_t code, const char *file,
     std::stringstream ss;
     ss << "NCCL failure :" << ncclGetErrorString(code) << " ";
     ss << file << "(" << line << ")";
-    throw ss.str();
+    throw std::runtime_error(ss.str());
   }
 
   return code;

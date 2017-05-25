@@ -575,18 +575,20 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
                                                                    );
   }
 
-  // setup nccl only on devices did split
+  fprintf(stderr,"HERE1\n"); fflush(stderr);
+
+  // setup nccl only on devices that did split
   std::vector<ncclComm_t> find_split_comms(find_split_n_devices);
   dh::safe_nccl(ncclCommInitAll(find_split_comms.data(), find_split_n_devices, dList.data())); // initialize communicator (One communicator per process)
   dh::synchronize_n_devices(find_split_n_devices, dList);
   
+  fprintf(stderr,"HERE2\n"); fflush(stderr);
 
 #ifdef _NCCL 
   for(int d_idx=0;d_idx<find_split_n_devices;d_idx++){
     int device_idx = dList[d_idx];
-
-    // if split finder is on master
     dh::safe_cuda(cudaSetDevice(device_idx));
+
     dh::safe_nccl(ncclAllGather((const void*)(nodes_temp[d_idx].data()),num_nodes_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth-1)),find_split_comms[d_idx],*(streams[d_idx])));
 
     dh::safe_nccl(ncclAllGather((const void*)(nodes_child_temp[d_idx].data()),num_nodes_child_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth)),find_split_comms[d_idx],*(streams[d_idx]))); // Note offset by n_nodes(depth) for recvbuff for child nodes
@@ -594,15 +596,22 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
     dh::safe_nccl(ncclAllGather((const void*)(left_child_smallest_temp[d_idx].data()),num_nodes_device*sizeof(bool)/sizeof(char), ncclChar,(void*)(left_child_smallest[d_idx].data()+n_nodes(depth-1)),find_split_comms[d_idx],*(streams[d_idx])));
   }  
     
+  fprintf(stderr,"HERE3\n"); fflush(stderr);
+
   for(int d_idx=0;d_idx<find_split_n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));
     dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
   }
 
-  if(n_devices!=find_split_n_devices){
+  fprintf(stderr,"HERE4: %d %d %d\n",depth,n_devices,find_split_n_devices); fflush(stderr);
+
+  if(n_devices>find_split_n_devices){
+    // if find_split_n_devices==1, this is just a copy operation, else it copies from master to all nodes in case extra devices not involved in split
     for(int d_idx=0;d_idx<n_devices;d_idx++){
       int device_idx = dList[d_idx];
+      dh::safe_cuda(cudaSetDevice(device_idx));
+      
       dh::safe_nccl(ncclBcast((void*)(nodes[d_idx].data()+n_nodes(depth-1)), n_nodes_level(depth)*sizeof(Node)/sizeof(char), ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
 
       dh::safe_nccl(ncclBcast((void*)(nodes[d_idx].data()+n_nodes(depth)), n_nodes_level(depth+1)*sizeof(Node)/sizeof(char), ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
@@ -610,6 +619,8 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
       dh::safe_nccl(ncclBcast((void*)(left_child_smallest[d_idx].data()+n_nodes(depth-1)), n_nodes_level(depth)*sizeof(bool)/sizeof(char), ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
 
     }
+    
+    fprintf(stderr,"HERE5\n"); fflush(stderr);
     
     for(int d_idx=0;d_idx<n_devices;d_idx++){
       int device_idx = dList[d_idx];
