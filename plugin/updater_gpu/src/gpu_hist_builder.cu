@@ -19,7 +19,7 @@
 namespace xgboost {
 namespace tree {
 
-  void DeviceGMat::Init(int device_idx, const common::GHistIndexMatrix& gmat, bst_uint begin, bst_uint end) {
+void DeviceGMat::Init(int device_idx, const common::GHistIndexMatrix& gmat, bst_uint begin, bst_uint end) {
     dh::safe_cuda(cudaSetDevice(device_idx));
   CHECK_EQ(gidx.size(), end-begin)
       << "gidx must be externally allocated";
@@ -93,7 +93,6 @@ void GPUHistBuilder::Init(const TrainParam& param) {
       << "Loss guided growth policy not supported. Use CPU algorithm.";
   this->param = param;
 
-  //  dh::safe_cuda(cudaSetDevice(param.gpu_id));
   CHECK(param.n_gpus!=0) << "Must have at least one device";
   int n_devices_all = dh::n_devices_all(param.n_gpus);
   for(int device_idx=0;device_idx<n_devices;device_idx++){
@@ -159,7 +158,6 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     int n_features = hmat_.row_ptr.size() - 1;
 
     // deliniate data onto multiple gpus
-    
     device_row_segments.push_back(0);
     device_element_segments.push_back(0);
     bst_uint offset=0;
@@ -175,7 +173,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     // Build feature segments
     std::vector<int> h_feature_segments;
     for (int node = 0; node < n_nodes_level(param.max_depth - 1); node++) {
-      for (int fidx = 0; fidx < hmat_.row_ptr.size() - 1; fidx++) {
+      for (int fidx = 0; fidx < n_features; fidx++) {
         h_feature_segments.push_back(hmat_.row_ptr[fidx] + node * n_bins);
       }
     }
@@ -183,9 +181,9 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
 
     // Construct feature map
     std::vector<int> h_gidx_feature_map(n_bins);
-    for (int row = 0; row < hmat_.row_ptr.size() - 1; row++) {
-      for (int i = hmat_.row_ptr[row]; i < hmat_.row_ptr[row + 1]; i++) {
-        h_gidx_feature_map[i] = row;
+    for (int fidx = 0; fidx < n_features; fidx++) {
+      for (int i = hmat_.row_ptr[fidx]; i < hmat_.row_ptr[fidx + 1]; i++) {
+        h_gidx_feature_map[i] = fidx;
       }
     }
     
@@ -219,7 +217,10 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     int max_num_nodes_device = n_nodes_level(param.max_depth) / find_split_n_devices;
 
 
-    // shard rows onto gpus
+    // num_rows_segment: for sharding rows onto gpus for splitting data
+    // num_elements_segment: for sharding rows (of elements) onto gpus for splitting data
+    // max_num_nodes_device: for sharding nodes onto gpus for split finding
+    // All other variables have full copy on gpu, with copy either being identical or just current portion (like for histogram) before AllReduce
     for(int d_idx=0;d_idx<n_devices;d_idx++){
       int device_idx = dList[d_idx];
       bst_uint num_rows_segment = device_row_segments[d_idx+1]-device_row_segments[d_idx];
@@ -237,16 +238,17 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
                   &prediction_cache[d_idx], num_rows_segment,
                   &position[d_idx], num_rows_segment,
                   &position_tmp[d_idx], num_rows_segment,
+                  &device_gpair[d_idx], num_rows_segment,
                   &device_matrix[d_idx].gidx, num_elements_segment,
                   &device_matrix[d_idx].ridx, num_elements_segment,
-                  &device_gpair[d_idx], num_rows_segment,
                   &gidx_feature_map[d_idx], n_bins,
                   &gidx_fvalue_map[d_idx], hmat_.cut.size()
                   );
 
       // Copy Host to Device
-      
       // Construct device matrix with copy
+
+      // shard rows onto gpus
       device_matrix[d_idx].Init(device_idx,gmat_,device_element_segments[d_idx],device_element_segments[d_idx+1]);
       gidx_feature_map[d_idx] = h_gidx_feature_map;
       gidx_fvalue_map[d_idx] = hmat_.cut;
@@ -269,7 +271,6 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
   }
 
 
-  // shard rows onto gpus
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));
@@ -315,19 +316,19 @@ void GPUHistBuilder::BuildHist(int depth) {
     dh::launch_n(device_idx, end-begin, [=] __device__(int local_idx) {
         
         int ridx = d_ridx[local_idx];
-        int pos = d_position[ridx-row_begin];
-        if (!is_active(pos, depth)) return;
+        int nidx = d_position[ridx-row_begin];
+        if (!is_active(nidx, depth)) return;
 
         // Only increment smallest node
         bool is_smallest =
-          (d_left_child_smallest[parent_nidx(pos)] && is_left_child(pos)) ||
-          (!d_left_child_smallest[parent_nidx(pos)] && !is_left_child(pos));
+          (d_left_child_smallest[parent_nidx(nidx)] && is_left_child(nidx)) ||
+          (!d_left_child_smallest[parent_nidx(nidx)] && !is_left_child(nidx));
         if (!is_smallest && depth > 0) return;
         
         int gidx = d_gidx[local_idx];
         gpu_gpair gpair = d_gpair[ridx-row_begin];
         
-        hist_builder.Add(gpair, gidx, pos);
+        hist_builder.Add(gpair, gidx, nidx);
       });
   }
 
@@ -338,8 +339,8 @@ void GPUHistBuilder::BuildHist(int depth) {
 
 
 #ifdef _NCCL
-  // reduce each element of histogram across multiple gpus
-  int master_device=dList[0];
+  // (in-place) reduce each element of histogram (for only current level) across multiple gpus
+  //  fprintf(stderr,"sizeof(gpu_gpair)/sizeof(float)=%d\n",sizeof(gpu_gpair)/sizeof(float));
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));
@@ -356,26 +357,34 @@ void GPUHistBuilder::BuildHist(int depth) {
   
   time.printElapsed("Reduce-Add Time");
   
-  // Subtraction trick
-  auto hist_builder = hist_vec[master_device].GetBuilder();
-  auto d_left_child_smallest = left_child_smallest[master_device].data();
-  int n_sub_bins = (n_nodes_level(depth) / 2) * hist_builder.n_bins;
+  // Subtraction trick (applied to all devices in same way -- to avoid doing on master and then Bcast)
   if (depth > 0) {
-    dh::launch_n(master_device, n_sub_bins, [=] __device__(int idx) {
-      int nidx = n_nodes(depth - 1) + ((idx / hist_builder.n_bins) * 2);
-      bool left_smallest = d_left_child_smallest[parent_nidx(nidx)];
-      if (left_smallest) {
-        nidx++;  // If left is smallest switch to right child
-      }
+    for(int d_idx=0;d_idx<n_devices;d_idx++){
+      int device_idx = dList[d_idx];
+      dh::safe_cuda(cudaSetDevice(device_idx));
 
-      int gidx = idx % hist_builder.n_bins;
-      gpu_gpair parent = hist_builder.Get(gidx, parent_nidx(nidx));
-      int other_nidx = left_smallest ? nidx - 1 : nidx + 1;
-      gpu_gpair other = hist_builder.Get(gidx, other_nidx);
-      hist_builder.Add(parent - other, gidx, nidx);
-    });
+      auto hist_builder = hist_vec[d_idx].GetBuilder();
+      auto d_left_child_smallest = left_child_smallest[d_idx].data();
+      int n_sub_bins = (n_nodes_level(depth) / 2) * hist_builder.n_bins;
+
+      dh::launch_n(device_idx, n_sub_bins, [=] __device__(int idx) {
+          int nidx = n_nodes(depth - 1) + ((idx / hist_builder.n_bins) * 2);
+          bool left_smallest = d_left_child_smallest[parent_nidx(nidx)];
+          if (left_smallest) {
+            nidx++;  // If left is smallest switch to right child
+          }
+          
+          int gidx = idx % hist_builder.n_bins;
+          gpu_gpair parent = hist_builder.Get(gidx, parent_nidx(nidx));
+          int other_nidx = left_smallest ? nidx - 1 : nidx + 1;
+          gpu_gpair other = hist_builder.Get(gidx, other_nidx);
+          hist_builder.Add(parent - other, gidx, nidx);
+        });
+    }
+    dh::synchronize_n_devices(n_devices, dList);
   }
-  dh::safe_cuda(cudaDeviceSynchronize());
+
+  
 }
 
 template <int BLOCK_THREADS>
@@ -416,7 +425,8 @@ __global__ void find_split_kernel(
 
   __syncthreads();
 
-  // below two are for accessing full-sized arrays stored on each device
+  // below two are for accessing full-sized node list stored on each device
+  // always one block per node, BLOCK_THREADS threads per block
   int level_node_idx = blockIdx.x + nodes_offset_device;
   int node_idx = n_nodes(depth - 1) + level_node_idx;
   
@@ -546,7 +556,6 @@ void GPUHistBuilder::FindSplitSpecialize(int depth) {
 
 template <int BLOCK_THREADS>
 void GPUHistBuilder::LaunchFindSplit(int depth){
-  int master_device=dList[0];
 
   bool colsample =
       param.colsample_bylevel < 1.0 || param.colsample_bytree < 1.0;
@@ -559,6 +568,7 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
   
   const int GRID_SIZE = num_nodes_device;
 
+  // for all nodes (split among devices) find best split per node
   for(int d_idx=0;d_idx<find_split_n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));
@@ -615,6 +625,7 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
       int device_idx = dList[d_idx];
       dh::safe_cuda(cudaSetDevice(device_idx));
       
+      int master_device=dList[0];
       dh::safe_nccl(ncclBcast((void*)(nodes[d_idx].data()+n_nodes(depth-1)), n_nodes_level(depth)*sizeof(Node)/sizeof(char), ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
 
       if(depth!=param.max_depth){ // don't copy over children nodes if no more nodes
@@ -638,7 +649,7 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
 
   
 #else
-    // TODO: Copy over nodes_temp
+    // TODO: Copy over nodes_temp, nodes_child_temp -> nodes , left_child_smallest_temp -> left_child_smalelst
   
 #endif
 
@@ -668,25 +679,32 @@ void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
                                                          });
   }
 
-  // sum over devices
+  // sum over devices on host (with blocking get())
   gpu_gpair sum=gpu_gpair();
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
     sum+=future_results[d_idx].get();
   }
 
-  int master_device=dList[0];
-  auto d_nodes = nodes[master_device].data();
-  auto gpu_param_alias = gpu_param;
+  // Setup first node so all devices have same first node (here done same on all devices, or could have done one device and Bcast if worried about exact precision issues)
+  for(int d_idx=0;d_idx<n_devices;d_idx++){
+    int device_idx = dList[d_idx];
+
+    auto d_nodes = nodes[d_idx].data();
+    auto gpu_param_alias = gpu_param;
   
-  dh::launch_n(master_device, 1, [=] __device__(int idx) {
-    gpu_gpair sum_gradients = sum;
-    d_nodes[idx] = Node(
-        sum_gradients,
-        CalcGain(gpu_param_alias, sum_gradients.grad(), sum_gradients.hess()),
-        CalcWeight(gpu_param_alias, sum_gradients.grad(),
-                   sum_gradients.hess()));
-  });
+    dh::launch_n(device_idx, 1, [=] __device__(int idx) {
+        gpu_gpair sum_gradients = sum;
+        d_nodes[idx] = Node(
+                            sum_gradients,
+                            CalcGain(gpu_param_alias, sum_gradients.grad(), sum_gradients.hess()),
+                            CalcWeight(gpu_param_alias, sum_gradients.grad(),
+                                       sum_gradients.hess()));
+      });
+  }
+  // synch all devices to host before moving on (No, can avoid because BuildHist calls another kernel in default stream)
+  //  dh::synchronize_n_devices(n_devices, dList);
+  
 }
 
 void GPUHistBuilder::UpdatePosition(int depth) {
@@ -732,7 +750,8 @@ void GPUHistBuilder::UpdatePositionDense(int depth) {
 	    }
 	  });
   }
-  dh::safe_cuda(cudaDeviceSynchronize());
+  dh::synchronize_n_devices(n_devices, dList);
+  //dh::safe_cuda(cudaDeviceSynchronize());
 }
 
 void GPUHistBuilder::UpdatePositionSparse(int depth) {
@@ -885,7 +904,7 @@ bool GPUHistBuilder::UpdatePredictionCache(
 void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
                             DMatrix* p_fmat, RegTree* p_tree) {
   this->InitData(gpair, *p_fmat, *p_tree);
-  this->InitFirstNode(gpair); // only creates first node on master, which is used by FindSplit (currently only on master)
+  this->InitFirstNode(gpair);
   this->ColSampleTree();
   long long int elapsed=0;
   for (int depth = 0; depth < param.max_depth; depth++) {
@@ -907,6 +926,8 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
     timeupdatepos.printElapsed("UP Time");
   }
   printf("Total BuildHist Time=%lld\n",elapsed);
+
+  // done with multi-GPU, pass back result from master to tree on host
   int master_device=dList[0];
   dense2sparse_tree(p_tree, nodes[master_device].tbegin(), nodes[master_device].tend(), param);
 }
