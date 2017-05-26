@@ -232,33 +232,30 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
                   &nodes_child_temp[d_idx],max_num_nodes_device,
                   &left_child_smallest[d_idx], n_nodes(param.max_depth),
                   &left_child_smallest_temp[d_idx],max_num_nodes_device,
-                  &feature_flags[d_idx], n_features,
-                  &fidx_min_map[d_idx], hmat_.min_val.size(),
-                  &feature_segments[d_idx], h_feature_segments.size(),
+                  &feature_flags[d_idx], n_features, // may change but same on all devices
+                  &fidx_min_map[d_idx], hmat_.min_val.size(), // constant and same on all devices
+                  &feature_segments[d_idx], h_feature_segments.size(), // constant and same on all devices
                   &prediction_cache[d_idx], num_rows_segment,
                   &position[d_idx], num_rows_segment,
                   &position_tmp[d_idx], num_rows_segment,
                   &device_gpair[d_idx], num_rows_segment,
-                  &device_matrix[d_idx].gidx, num_elements_segment,
-                  &device_matrix[d_idx].ridx, num_elements_segment,
-                  &gidx_feature_map[d_idx], n_bins,
-                  &gidx_fvalue_map[d_idx], hmat_.cut.size()
+                  &device_matrix[d_idx].gidx, num_elements_segment, // constant and same on all devices
+                  &device_matrix[d_idx].ridx, num_elements_segment, // constant and same on all devices
+                  &gidx_feature_map[d_idx], n_bins, // constant and same on all devices
+                  &gidx_fvalue_map[d_idx], hmat_.cut.size() // constant and same on all devices
                   );
 
-      // Copy Host to Device
-      // Construct device matrix with copy
-
-      // shard rows onto gpus
+      // Copy Host to Device (assumes comes after ba.allocate that sets device)
       device_matrix[d_idx].Init(device_idx,gmat_,device_element_segments[d_idx],device_element_segments[d_idx+1]);
       gidx_feature_map[d_idx] = h_gidx_feature_map;
       gidx_fvalue_map[d_idx] = hmat_.cut;
-      feature_flags[d_idx].fill(1);
-
-      // Initialize only, no copy
-      hist_vec[d_idx].Init(n_bins);
-      prediction_cache[d_idx].fill(0);
       feature_segments[d_idx] = h_feature_segments;
       fidx_min_map[d_idx] = hmat_.min_val;
+
+      // Initialize, no copy
+      hist_vec[d_idx].Init(n_bins); // init host object
+      prediction_cache[d_idx].fill(0); // init device object (assumes comes after ba.allocate that sets device)
+      feature_flags[d_idx].fill(1); // init device object (assumes comes after ba.allocate that sets device)
     }
   
         
@@ -271,6 +268,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
   }
 
 
+  // copy or init to do every iteration
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));
@@ -843,9 +841,16 @@ void GPUHistBuilder::ColSampleLevel() {
   for (auto fidx : feature_set_level) {
     h_feature_flags[fidx] = 1;
   }
-  
-  for(auto &f:feature_flags){
-    f = h_feature_flags;
+
+  // copy from Host to Device for all devices
+  //  for(auto &f:feature_flags){ // this doesn't set device as should
+  //    f = h_feature_flags;
+  //  }
+  for(int d_idx=0;d_idx<n_devices;d_idx++){
+    int device_idx = dList[d_idx];
+    dh::safe_cuda(cudaSetDevice(device_idx));
+
+    feature_flags[d_idx] = h_feature_flags;
   }
 }
 
