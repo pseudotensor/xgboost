@@ -103,6 +103,7 @@ class TestGPU(unittest.TestCase):
 
 
     def test_grow_gpu_hist(self):
+        n_gpus=1
         tm._skip_if_no_sklearn()
         from sklearn.datasets import load_digits
         try:
@@ -116,12 +117,14 @@ class TestGPU(unittest.TestCase):
                     'nthread': 1,
                     'eta': 1,
                     'silent': 1,
+                    'n_gpus': n_gpus,
                     'objective': 'binary:logistic',
                     'eval_metric': 'auc'}
         ag_param2 = {'max_depth': 2,
                      'updater': 'grow_gpu_hist',
                      'eta': 1,
                      'silent': 1,
+                     'n_gpus': n_gpus,
                      'objective': 'binary:logistic',
                      'eval_metric': 'auc'}
         ag_res = {}
@@ -145,6 +148,7 @@ class TestGPU(unittest.TestCase):
         param = {'objective': 'binary:logistic',
                  'updater': 'grow_gpu_hist',
                  'max_depth': 3,
+                 'n_gpus': n_gpus,
                  'eval_metric': 'auc'}
         res = {}
         xgb.train(param, dtrain, 10, [(dtrain, 'train'), (dtest, 'test')],
@@ -161,6 +165,7 @@ class TestGPU(unittest.TestCase):
         param = {'objective': 'binary:logistic',
                  'updater': 'grow_gpu_hist',
                  'max_depth': 2,
+                 'n_gpus': n_gpus,
                  'eval_metric': 'auc'}
         res = {}
         xgb.train(param, dtrain2, 10, [(dtrain2, 'train')], evals_result=res)
@@ -194,6 +199,7 @@ class TestGPU(unittest.TestCase):
         param = {'objective': 'binary:logistic',
                  'updater': 'grow_gpu_hist',
                  'max_depth': 2,
+                 'n_gpus': n_gpus,
                  'eval_metric': 'auc',
                  'max_bin': 2}
         res = {}
@@ -205,6 +211,7 @@ class TestGPU(unittest.TestCase):
         param = {'objective': 'binary:logistic',
                  'updater': 'grow_gpu_hist',
                  'max_depth': 3,
+                 'n_gpus': n_gpus,
                  'eval_metric': 'auc',
                  'colsample_bytree': 0.5,
                  'colsample_bylevel': 0.5,
@@ -219,6 +226,7 @@ class TestGPU(unittest.TestCase):
         param = {'objective': 'binary:logistic',
                  'updater': 'grow_gpu_hist',
                  'max_depth': 3,
+                 'n_gpus': n_gpus,
                  'eval_metric': 'auc',
                  'max_bin': 2048
                  }

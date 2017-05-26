@@ -121,7 +121,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
 
     // set dList member
     dList.resize(n_devices);
-    for (int i = 0; i < n_devices; ++i) dList[i] = i % n_devices;
+    for (int i = param.gpu_id; i < n_devices; ++i) dList[i] = i % n_devices;
     
 #ifdef _NCCL
     // initialize nccl
@@ -416,7 +416,7 @@ __global__ void find_split_kernel(
 
   __syncthreads();
 
-  // for accessing full-sized arrays stored on each device
+  // below two are for accessing full-sized arrays stored on each device
   int level_node_idx = blockIdx.x + nodes_offset_device;
   int node_idx = n_nodes(depth - 1) + level_node_idx;
   
@@ -503,7 +503,7 @@ __global__ void find_split_kernel(
       // split.Print();
     }
 
-    d_nodes_child_temp[blockIdx.x*2] = Node(
+    d_nodes_child_temp[blockIdx.x*2+0] = Node(
         split.left_sum,
         CalcGain(gpu_param, split.left_sum.grad(), split.left_sum.hess()),
         CalcWeight(gpu_param, split.left_sum.grad(), split.left_sum.hess()));
@@ -591,7 +591,9 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
 
     dh::safe_nccl(ncclAllGather((const void*)(nodes_temp[d_idx].data()),num_nodes_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth-1)),find_split_comms[d_idx],*(streams[d_idx])));
 
-    dh::safe_nccl(ncclAllGather((const void*)(nodes_child_temp[d_idx].data()),num_nodes_child_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth)),find_split_comms[d_idx],*(streams[d_idx]))); // Note offset by n_nodes(depth) for recvbuff for child nodes
+    if(depth!=param.max_depth){ // don't copy over children nodes if no more nodes
+      dh::safe_nccl(ncclAllGather((const void*)(nodes_child_temp[d_idx].data()),num_nodes_child_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth)),find_split_comms[d_idx],*(streams[d_idx]))); // Note offset by n_nodes(depth) for recvbuff for child nodes
+    }
 
     dh::safe_nccl(ncclAllGather((const void*)(left_child_smallest_temp[d_idx].data()),num_nodes_device*sizeof(bool)/sizeof(char), ncclChar,(void*)(left_child_smallest[d_idx].data()+n_nodes(depth-1)),find_split_comms[d_idx],*(streams[d_idx])));
   }  
@@ -606,7 +608,8 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
 
   fprintf(stderr,"HERE4: %d %d %d\n",depth,n_devices,find_split_n_devices); fflush(stderr);
 
-  if(n_devices>find_split_n_devices){
+  if(n_devices>find_split_n_devices && n_devices>1){
+    // if n_devices==1, no need to Bcast
     // if find_split_n_devices==1, this is just a copy operation, else it copies from master to all nodes in case extra devices not involved in split
     for(int d_idx=0;d_idx<n_devices;d_idx++){
       int device_idx = dList[d_idx];
@@ -614,7 +617,9 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
       
       dh::safe_nccl(ncclBcast((void*)(nodes[d_idx].data()+n_nodes(depth-1)), n_nodes_level(depth)*sizeof(Node)/sizeof(char), ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
 
-      dh::safe_nccl(ncclBcast((void*)(nodes[d_idx].data()+n_nodes(depth)), n_nodes_level(depth+1)*sizeof(Node)/sizeof(char), ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
+      if(depth!=param.max_depth){ // don't copy over children nodes if no more nodes
+        dh::safe_nccl(ncclBcast((void*)(nodes[d_idx].data()+n_nodes(depth)), n_nodes_level(depth+1)*sizeof(Node)/sizeof(char), ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
+      }
       
       dh::safe_nccl(ncclBcast((void*)(left_child_smallest[d_idx].data()+n_nodes(depth-1)), n_nodes_level(depth)*sizeof(bool)/sizeof(char), ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
 
