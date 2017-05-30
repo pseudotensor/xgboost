@@ -58,7 +58,7 @@ class TestGPU(unittest.TestCase):
                  'max_depth': 3,
                  'eval_metric': 'auc'}
         res = {}
-        xgb.train(param, dtrain, 10, [(dtrain, 'train'), (dtest, 'test')],
+        xgb.train(param, dtrain, num_rounds, [(dtrain, 'train'), (dtest, 'test')],
                   evals_result=res)
         assert self.non_decreasing(res['train']['auc'])
         assert self.non_decreasing(res['test']['auc'])
@@ -74,13 +74,13 @@ class TestGPU(unittest.TestCase):
                  'max_depth': 2,
                  'eval_metric': 'auc'}
         res = {}
-        xgb.train(param, dtrain2, 10, [(dtrain2, 'train')], evals_result=res)
+        xgb.train(param, dtrain2, num_rounds, [(dtrain2, 'train')], evals_result=res)
 
         assert self.non_decreasing(res['train']['auc'])
         assert res['train']['auc'][0] >= 0.85
 
         for j in range(X2.shape[1]):
-            for i in rng.choice(X2.shape[0], size=10, replace=False):
+            for i in rng.choice(X2.shape[0], size=num_rounds, replace=False):
                 X2[i, j] = 2
 
         dtrain3 = xgb.DMatrix(X2, label=y2)
@@ -92,18 +92,18 @@ class TestGPU(unittest.TestCase):
         assert res['train']['auc'][0] >= 0.85
 
         for j in range(X2.shape[1]):
-            for i in np.random.choice(X2.shape[0], size=10, replace=False):
+            for i in np.random.choice(X2.shape[0], size=num_rounds, replace=False):
                 X2[i, j] = 3
 
         dtrain4 = xgb.DMatrix(X2, label=y2)
         res = {}
-        xgb.train(param, dtrain4, 10, [(dtrain4, 'train')], evals_result=res)
+        xgb.train(param, dtrain4, num_rounds, [(dtrain4, 'train')], evals_result=res)
         assert self.non_decreasing(res['train']['auc'])
         assert res['train']['auc'][0] >= 0.85
 
 
     def test_grow_gpu_hist(self):
-        n_gpus=1
+        n_gpus=-1
         tm._skip_if_no_sklearn()
         from sklearn.datasets import load_digits
         try:
@@ -136,6 +136,7 @@ class TestGPU(unittest.TestCase):
         xgb.train(ag_param2, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
                   evals_result=ag_res2)
         assert ag_res['train']['auc'] == ag_res2['train']['auc']
+#        assert 1==0
         assert ag_res['test']['auc'] == ag_res2['test']['auc']
 
         digits = load_digits(2)
@@ -151,7 +152,7 @@ class TestGPU(unittest.TestCase):
                  'n_gpus': n_gpus,
                  'eval_metric': 'auc'}
         res = {}
-        xgb.train(param, dtrain, 10, [(dtrain, 'train'), (dtest, 'test')],
+        xgb.train(param, dtrain, num_rounds, [(dtrain, 'train'), (dtest, 'test')],
                   evals_result=res)
         assert self.non_decreasing(res['train']['auc'])
         assert self.non_decreasing(res['test']['auc'])
@@ -168,13 +169,13 @@ class TestGPU(unittest.TestCase):
                  'n_gpus': n_gpus,
                  'eval_metric': 'auc'}
         res = {}
-        xgb.train(param, dtrain2, 10, [(dtrain2, 'train')], evals_result=res)
+        xgb.train(param, dtrain2, num_rounds, [(dtrain2, 'train')], evals_result=res)
 
         assert self.non_decreasing(res['train']['auc'])
         assert res['train']['auc'][0] >= 0.85
 
         for j in range(X2.shape[1]):
-            for i in rng.choice(X2.shape[0], size=10, replace=False):
+            for i in rng.choice(X2.shape[0], size=num_rounds, replace=False):
                 X2[i, j] = 2
 
         dtrain3 = xgb.DMatrix(X2, label=y2)
@@ -186,12 +187,12 @@ class TestGPU(unittest.TestCase):
         assert res['train']['auc'][0] >= 0.85
 
         for j in range(X2.shape[1]):
-            for i in np.random.choice(X2.shape[0], size=10, replace=False):
+            for i in np.random.choice(X2.shape[0], size=num_rounds, replace=False):
                 X2[i, j] = 3
 
         dtrain4 = xgb.DMatrix(X2, label=y2)
         res = {}
-        xgb.train(param, dtrain4, 10, [(dtrain4, 'train')], evals_result=res)
+        xgb.train(param, dtrain4, num_rounds, [(dtrain4, 'train')], evals_result=res)
         assert self.non_decreasing(res['train']['auc'])
         assert res['train']['auc'][0] >= 0.85
 
@@ -203,7 +204,7 @@ class TestGPU(unittest.TestCase):
                  'eval_metric': 'auc',
                  'max_bin': 2}
         res = {}
-        xgb.train(param, dtrain2, 10, [(dtrain2, 'train')], evals_result=res)
+        xgb.train(param, dtrain2, num_rounds, [(dtrain2, 'train')], evals_result=res)
         assert self.non_decreasing(res['train']['auc'])
         assert res['train']['auc'][0] >= 0.85
 
@@ -218,7 +219,7 @@ class TestGPU(unittest.TestCase):
                  'subsample': 0.5
                  }
         res = {}
-        xgb.train(param, dtrain2, 10, [(dtrain2, 'train')], evals_result=res)
+        xgb.train(param, dtrain2, num_rounds, [(dtrain2, 'train')], evals_result=res)
         assert self.non_decreasing(res['train']['auc'])
         assert res['train']['auc'][0] >= 0.85
 
@@ -231,7 +232,7 @@ class TestGPU(unittest.TestCase):
                  'max_bin': 2048
                  }
         res = {}
-        xgb.train(param, dtrain2, 10, [(dtrain2, 'train')], evals_result=res)
+        xgb.train(param, dtrain2, num_rounds, [(dtrain2, 'train')], evals_result=res)
         assert self.non_decreasing(res['train']['auc'])
         assert res['train']['auc'][0] >= 0.85
 
