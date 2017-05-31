@@ -98,7 +98,8 @@ if(PLUGIN_UPDATER_GPU)
 	set(CUB_DIRECTORY "" CACHE PATH "CUB 1.5.4 directory")
 	include_directories(${CUB_DIRECTORY})
     #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;-arch=compute_35;-lineinfo;-D_NCCL=1")
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;-arch=compute_35;-lineinfo;")
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-lineinfo;-G;-g;--expt-extended-lambda;-gencode arch=compute_61,code=sm_61")
+    #set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;-gencode arch=compute_61,code=sm_61;-lineinfo")
     if(NOT MSVC)
         set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-Xcompiler -fPIC")
     endif()
@@ -111,7 +112,7 @@ if(PLUGIN_UPDATER_GPU)
       ${CUDA_SOURCES}
       )
     link_directories("/usr/local/cuda/lib64/")
-    target_link_libraries(updater_gpu nccl)
+    target_link_libraries(updater_gpu nccl cudadevrt)
     
 endif()
 

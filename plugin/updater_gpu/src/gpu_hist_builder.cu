@@ -76,7 +76,7 @@ GPUHistBuilder::GPUHistBuilder()
       prediction_cache_initialised(false) {}
 
 GPUHistBuilder::~GPUHistBuilder() {
-#ifdef _NCCL
+#ifdef _NCCLALT
   for(int d_idx=0; d_idx<n_devices; ++d_idx)
     {
       ncclCommDestroy(comms[d_idx]);
@@ -132,16 +132,26 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     printf("# NCCL: Using devices\n");
     for (int d_idx = 0; d_idx < n_devices; ++d_idx) {
 
+      fprintf(stderr,"HERE1: %d\n",d_idx); fflush(stderr);
       streams[d_idx] = (cudaStream_t*)malloc(sizeof(cudaStream_t));
+      if(streams[d_idx]==NULL){
+        fprintf(stderr,"Couldn't allocate streams\n"); fflush(stderr);
+      }
+      fprintf(stderr,"HERE2\n"); fflush(stderr);
       dh::safe_cuda(cudaSetDevice(dList[d_idx]));
+      fprintf(stderr,"HERE3\n"); fflush(stderr);
       dh::safe_cuda(cudaStreamCreate(streams[d_idx]));
+      fprintf(stderr,"HERE4\n"); fflush(stderr);
       
       int cudaDev;
       int rank;
       cudaDeviceProp prop;
       dh::safe_nccl(ncclCommCuDevice(comms[d_idx], &cudaDev));
+      fprintf(stderr,"HERE5\n"); fflush(stderr);
       dh::safe_nccl(ncclCommUserRank(comms[d_idx], &rank));
+      fprintf(stderr,"HERE6\n"); fflush(stderr);
       dh::safe_cuda(cudaGetDeviceProperties(&prop, cudaDev));
+      fprintf(stderr,"HERE7\n"); fflush(stderr);
       printf("#   Rank %2d uses device %2d [0x%02x] %s\n", rank, cudaDev,
              prop.pciBusID, prop.name); fflush(stdout);
     }
@@ -196,6 +206,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     
     // allocate vectors across all devices
     hist_vec.resize(n_devices);
+    hist_vec_temp.resize(n_devices);
     nodes.resize(n_devices);
     nodes_temp.resize(n_devices);
     nodes_child_temp.resize(n_devices);
@@ -227,6 +238,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
       bst_uint num_elements_segment = device_element_segments[d_idx+1]-device_element_segments[d_idx];
       ba.allocate(device_idx,
                   &(hist_vec[d_idx].data),n_nodes(param.max_depth - 1) * n_bins,
+                  &(hist_vec_temp[d_idx].data),n_nodes(param.max_depth - 1) * n_bins,
                   &nodes[d_idx], n_nodes(param.max_depth),
                   &nodes_temp[d_idx],max_num_nodes_device,
                   &nodes_child_temp[d_idx],max_num_nodes_device,
@@ -254,6 +266,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
 
       // Initialize, no copy
       hist_vec[d_idx].Init(n_bins); // init host object
+      hist_vec_temp[d_idx].Init(n_bins); // init host object
       prediction_cache[d_idx].fill(0); // init device object (assumes comes after ba.allocate that sets device)
       feature_flags[d_idx].fill(1); // init device object (assumes comes after ba.allocate that sets device)
     }
@@ -284,6 +297,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     subsample_gpair(&device_gpair[d_idx], param.subsample);
 
     hist_vec[d_idx].Reset(device_idx);
+    hist_vec_temp[d_idx].Reset(device_idx);
 
     // left_child_smallest and left_child_smallest_temp don't need to be initialized
   }
@@ -342,7 +356,10 @@ void GPUHistBuilder::BuildHist(int depth) {
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));
-    dh::safe_nccl(ncclAllReduce((const void*)(hist_vec[d_idx].GetLevelPtr(depth)),(void*)(hist_vec[d_idx].GetLevelPtr(depth)),hist_vec[d_idx].LevelSize(depth)*sizeof(gpu_gpair)/sizeof(float), ncclFloat, ncclSum, comms[d_idx],*(streams[d_idx])));
+    //    dh::safe_nccl(ncclAllReduce((const void*)(hist_vec[d_idx].GetLevelPtr(depth)),(void*)(hist_vec[d_idx].GetLevelPtr(depth)),hist_vec[d_idx].LevelSize(depth)*sizeof(gpu_gpair)/sizeof(float), ncclFloat, ncclSum, comms[d_idx],*(streams[d_idx])));
+    // out of place
+    dh::safe_nccl(ncclAllReduce((const void*)(hist_vec[d_idx].GetLevelPtr(depth)),(void*)(hist_vec_temp[d_idx].GetLevelPtr(depth)),hist_vec[d_idx].LevelSize(depth)*sizeof(gpu_gpair)/sizeof(float), ncclFloat, ncclSum, comms[d_idx],*(streams[d_idx])));
+    cudaMemcpy(hist_vec[d_idx].GetLevelPtr(depth),hist_vec_temp[d_idx].GetLevelPtr(depth),hist_vec[d_idx].LevelSize(depth)*sizeof(gpu_gpair),cudaMemcpyDeviceToDevice);
   }
 
 

@@ -105,6 +105,7 @@ class GPUHistBuilder {
   std::vector<int> device_element_segments;
 
   std::vector<DeviceHist> hist_vec;
+  std::vector<DeviceHist> hist_vec_temp;
   std::vector<dh::dvec<Node>> nodes;
   std::vector<dh::dvec<Node>> nodes_temp;
   std::vector<dh::dvec<Node>> nodes_child_temp;
