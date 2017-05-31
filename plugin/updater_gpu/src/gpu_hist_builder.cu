@@ -852,7 +852,7 @@ bool GPUHistBuilder::UpdatePredictionCache(
     const DMatrix* data, std::vector<bst_float>* p_out_preds) {
   std::vector<bst_float>& out_preds = *p_out_preds;
 
-  /*
+
   if (nodes.empty() || !p_last_fmat_ || data != p_last_fmat_) {
     return false;
   }
@@ -873,8 +873,6 @@ bool GPUHistBuilder::UpdatePredictionCache(
   float eps = param.learning_rate;
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
-    dh::safe_cuda(cudaSetDevice(device_idx));
-    
     size_t row_begin = device_row_segments[d_idx];
     size_t row_end = device_row_segments[d_idx+1];
 
@@ -894,8 +892,7 @@ bool GPUHistBuilder::UpdatePredictionCache(
   dh::synchronize_n_devices(n_devices, dList);
 
   return true;
-  */
-  return false;
+
 }
   
 void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
