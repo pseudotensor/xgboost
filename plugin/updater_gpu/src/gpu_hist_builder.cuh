@@ -131,6 +131,7 @@ class GPUHistBuilder {
   std::vector<cudaStream_t*> streams;
 #if(NCCL)
   std::vector<ncclComm_t> comms;
+  std::vector<std::vector<ncclComm_t>> find_split_comms;
 #endif
 };
 }  // namespace tree

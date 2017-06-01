@@ -121,7 +121,8 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
       int device_idx = (param.gpu_id + d_idx) % n_devices;
       dList[d_idx]=device_idx;
     }
-    
+
+
 #if(NCCL)
     // initialize nccl
 
@@ -145,6 +146,14 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
       printf("#   Rank %2d uses device %2d [0x%02x] %s\n", rank, cudaDev,
              prop.pciBusID, prop.name); fflush(stdout);
     }
+
+
+    // local find_split group of comms for each case of reduced number of GPUs to use
+    find_split_comms.resize(n_devices,std::vector<ncclComm_t>(n_devices)); // TODO: Excessive, but ok, and best to do here instead of repeatedly
+    for (int num_d = 1; num_d <= n_devices; ++num_d) { // loop over number of devices used
+      dh::safe_nccl(ncclCommInitAll(find_split_comms[num_d-1].data(), num_d, dList.data())); // initialize communicator (One communicator per process)
+    }
+
 #endif    
     
     CHECK(fmat.SingleColBlock()) << "grow_gpu_hist: must have single column "
@@ -611,22 +620,20 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
                                                                    );
   }
 
-  // setup nccl only on devices that did split
-  std::vector<ncclComm_t> find_split_comms(find_split_n_devices);
-  dh::safe_nccl(ncclCommInitAll(find_split_comms.data(), find_split_n_devices, dList.data())); // initialize communicator (One communicator per process)
+  // nccl only on devices that did split
   dh::synchronize_n_devices(find_split_n_devices, dList);
 
   for(int d_idx=0;d_idx<find_split_n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));
 
-    dh::safe_nccl(ncclAllGather((const void*)(nodes_temp[d_idx].data()),num_nodes_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth-1)),find_split_comms[d_idx],*(streams[d_idx])));
+    dh::safe_nccl(ncclAllGather((const void*)(nodes_temp[d_idx].data()),num_nodes_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth-1)),find_split_comms[find_split_n_devices-1][d_idx],*(streams[d_idx])));
 
     if(depth!=param.max_depth){ // don't copy over children nodes if no more nodes
-      dh::safe_nccl(ncclAllGather((const void*)(nodes_child_temp[d_idx].data()),num_nodes_child_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth)),find_split_comms[d_idx],*(streams[d_idx]))); // Note offset by n_nodes(depth) for recvbuff for child nodes
+      dh::safe_nccl(ncclAllGather((const void*)(nodes_child_temp[d_idx].data()),num_nodes_child_device*sizeof(Node)/sizeof(char), ncclChar,(void*)(nodes[d_idx].data()+n_nodes(depth)),find_split_comms[find_split_n_devices-1][d_idx],*(streams[d_idx]))); // Note offset by n_nodes(depth) for recvbuff for child nodes
     }
 
-    dh::safe_nccl(ncclAllGather((const void*)(left_child_smallest_temp[d_idx].data()),num_nodes_device*sizeof(bool)/sizeof(char), ncclChar,(void*)(left_child_smallest[d_idx].data()+n_nodes(depth-1)),find_split_comms[d_idx],*(streams[d_idx])));
+    dh::safe_nccl(ncclAllGather((const void*)(left_child_smallest_temp[d_idx].data()),num_nodes_device*sizeof(bool)/sizeof(char), ncclChar,(void*)(left_child_smallest[d_idx].data()+n_nodes(depth-1)),find_split_comms[find_split_n_devices-1][d_idx],*(streams[d_idx])));
   }  
     
   for(int d_idx=0;d_idx<find_split_n_devices;d_idx++){
