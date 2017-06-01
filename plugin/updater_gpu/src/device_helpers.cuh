@@ -87,13 +87,19 @@ inline int n_visible_devices() {
 }
 
 inline int n_devices_all(int n_gpus) {
+  if(NCCL==0 && n_gpus>1 || NCCL==0 && n_gpus!=0){
+    if(n_gpus!=1 && n_gpus!=0){
+      fprintf(stderr,"NCCL=0, so forcing n_gpus=1\n");
+      fflush(stderr);
+    }
+    n_gpus=1;
+  }
   int n_devices_visible = dh::n_visible_devices();
   int n_devices = n_gpus < 0 ? n_devices_visible : n_gpus;
   return(n_devices);
 }
 inline int n_devices(int n_gpus, int num_rows) {
-  int n_devices_visible = dh::n_visible_devices();
-  int n_devices = n_gpus < 0 ? n_devices_visible : n_gpus;
+  int n_devices = dh::n_devices_all(n_gpus);
   // fix-up device number to be limited by number of rows
   n_devices = n_devices > num_rows ? num_rows : n_devices;
   return(n_devices);

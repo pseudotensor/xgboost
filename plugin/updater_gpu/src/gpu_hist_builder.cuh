@@ -11,7 +11,9 @@
 #include "device_helpers.cuh"
 #include "types.cuh"
 
+#ifndef NCCL
 #define NCCL 1
+#endif
 
 #if(NCCL)
 #include "nccl.h"

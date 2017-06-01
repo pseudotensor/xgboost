@@ -102,8 +102,6 @@ void GPUHistBuilder::Init(const TrainParam& param) {
     }
   }
 
-  CHECK_LE(param.n_gpus,dh::n_visible_devices()) << "Specify number of GPUs to be less or equal to number of visible GPU devices.";
-
 }
 void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
                               DMatrix& fmat,  // NOLINT
@@ -340,6 +338,7 @@ void GPUHistBuilder::BuildHist(int depth) {
 
 #if(NCCL)
   // (in-place) reduce each element of histogram (for only current level) across multiple gpus
+  // TODO: use out of place with pre-allocated buffer, but then have to copy back on device
   //  fprintf(stderr,"sizeof(gpu_gpair)/sizeof(float)=%d\n",sizeof(gpu_gpair)/sizeof(float));
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
@@ -353,6 +352,8 @@ void GPUHistBuilder::BuildHist(int depth) {
     dh::safe_cuda(cudaSetDevice(device_idx));
     dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
   }
+#else
+  // if no NCCL, then presume only 1 GPU, then already correct
 #endif
   
   time.printElapsed("Reduce-Add Time");
@@ -508,27 +509,47 @@ __global__ void find_split_kernel(
 
   // Create node
   if (threadIdx.x == 0) {
-    d_nodes_temp[blockIdx.x] = d_nodes[node_idx]; // first copy node values
-    d_nodes_temp[blockIdx.x].split = split; // now assign split
-    if (depth == 0) {
-      // split.Print();
+    if(d_nodes_temp==NULL){
+      d_nodes[node_idx].split = split;
+    }
+    else{
+        d_nodes_temp[blockIdx.x] = d_nodes[node_idx]; // first copy node values
+        d_nodes_temp[blockIdx.x].split = split; // now assign split
     }
 
-    d_nodes_child_temp[blockIdx.x*2+0] = Node(
-        split.left_sum,
-        CalcGain(gpu_param, split.left_sum.grad(), split.left_sum.hess()),
-        CalcWeight(gpu_param, split.left_sum.grad(), split.left_sum.hess()));
+    //    if (depth == 0) {
+      // split.Print();
+    //    }
 
-    d_nodes_child_temp[blockIdx.x*2+1] = Node(
-        split.right_sum,
-        CalcGain(gpu_param, split.right_sum.grad(), split.right_sum.hess()),
-        CalcWeight(gpu_param, split.right_sum.grad(), split.right_sum.hess()));
+    Node *Nodeleft, *Noderight;
+    bool *left_child_smallest;
+    if(d_nodes_temp==NULL){
+      Nodeleft = &d_nodes[left_child_nidx(node_idx)];
+      Noderight = &d_nodes[right_child_nidx(node_idx)];
+      left_child_smallest = &d_left_child_smallest_temp[node_idx]; // NOTE: not per level, even though _temp variable name
+    }
+    else{
+      Nodeleft = &d_nodes_child_temp[blockIdx.x*2+0];
+      Noderight = &d_nodes_child_temp[blockIdx.x*2+1];
+      left_child_smallest = &d_left_child_smallest_temp[blockIdx.x];
+    }
+
+    *Nodeleft = Node(
+                     split.left_sum,
+                     CalcGain(gpu_param, split.left_sum.grad(), split.left_sum.hess()),
+                     CalcWeight(gpu_param, split.left_sum.grad(), split.left_sum.hess()));
+
+
+    *Noderight  = Node(
+                       split.right_sum,
+                       CalcGain(gpu_param, split.right_sum.grad(), split.right_sum.hess()),
+                       CalcWeight(gpu_param, split.right_sum.grad(), split.right_sum.hess()));
 
     // Record smallest node
     if (split.left_sum.hess() <= split.right_sum.hess()) {
-      d_left_child_smallest_temp[blockIdx.x] = true;
+      *left_child_smallest = true;
     } else {
-      d_left_child_smallest_temp[blockIdx.x] = false;
+      *left_child_smallest = false;
     }
   }
 }
@@ -566,10 +587,13 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
   find_split_n_devices = std::min(n_nodes_level(depth),find_split_n_devices);
   int num_nodes_device = n_nodes_level(depth) / find_split_n_devices;
   int num_nodes_child_device = n_nodes_level(depth+1) / find_split_n_devices;
-
-  // NOTE: No need to scatter before gather as all devices have same copy of nodes, and within find_split_kernel() nodes_temp is given values from nodes
-  
   const int GRID_SIZE = num_nodes_device;
+
+  
+  
+#if(NCCL)
+  // NOTE: No need to scatter before gather as all devices have same copy of nodes, and within find_split_kernel() nodes_temp is given values from nodes
+
   // for all nodes (split among devices) find best split per node
   for(int d_idx=0;d_idx<find_split_n_devices;d_idx++){
     int device_idx = dList[d_idx];
@@ -591,8 +615,7 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
   std::vector<ncclComm_t> find_split_comms(find_split_n_devices);
   dh::safe_nccl(ncclCommInitAll(find_split_comms.data(), find_split_n_devices, dList.data())); // initialize communicator (One communicator per process)
   dh::synchronize_n_devices(find_split_n_devices, dList);
-  
-#if(NCCL) 
+
   for(int d_idx=0;d_idx<find_split_n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));
@@ -641,11 +664,25 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
 
   
 #else
-    // TODO: Copy over nodes_temp, nodes_child_temp -> nodes , left_child_smallest_temp -> left_child_smalelst
-  
+  {
+    int d_idx=0;
+    int device_idx = dList[d_idx];
+    dh::safe_cuda(cudaSetDevice(device_idx));
+
+    int nodes_offset_device = d_idx * num_nodes_device;
+    find_split_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>((const gpu_gpair*)(hist_vec[d_idx].GetLevelPtr(depth)), feature_segments[d_idx].data(),
+                                                                   (int)depth, (int)(info->num_col), (int)(hmat_.row_ptr.back()),
+                                                                   nodes[d_idx].data(), NULL, NULL, nodes_offset_device,
+                                                                   fidx_min_map[d_idx].data(), gidx_fvalue_map[d_idx].data(),
+                                                                   gpu_param,
+                                                                   left_child_smallest[d_idx].data(),
+                                                                   colsample,
+                                                                   feature_flags[d_idx].data()
+                                                                   );
+  }
 #endif
 
-  // NOTE: No need to syncrhonize with host as all above pure P2P ops
+  // NOTE: No need to syncrhonize with host as all above pure P2P ops or on-device ops
   
 }
 
