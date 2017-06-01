@@ -8,7 +8,6 @@
 #include <thrust/random.h>
 #include <thrust/system/cuda/error.h>
 #include <thrust/system_error.h>
-#include "nccl.h"
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -16,7 +15,14 @@
 #include <string>
 #include <vector>
 
+#ifndef NCCL
 #define NCCL 1
+#endif
+
+#if(NCCL)
+#include "nccl.h"
+#endif
+
 
 // Uncomment to enable
 //#define DEVICE_TIMER
