@@ -14,7 +14,6 @@
 #include "device_helpers.cuh"
 #include "gpu_hist_builder.cuh"
 
-#define _NCCL 1
 
 namespace xgboost {
 namespace tree {
@@ -76,7 +75,7 @@ GPUHistBuilder::GPUHistBuilder()
       prediction_cache_initialised(false) {}
 
 GPUHistBuilder::~GPUHistBuilder() {
-#ifdef _NCCL
+#if(NCCL)
   for(int d_idx=0; d_idx<n_devices; ++d_idx)
     {
       ncclCommDestroy(comms[d_idx]);
@@ -114,15 +113,18 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
   info = &fmat.info();
   num_rows = info->num_row;
   n_devices = dh::n_devices(param.n_gpus,num_rows);
-  
+
 
   if (!initialised) {
 
     // set dList member
     dList.resize(n_devices);
-    for (int i = param.gpu_id; i < n_devices; ++i) dList[i] = i % n_devices;
+    for (int d_idx = 0; d_idx < n_devices; ++d_idx){
+      int device_idx = (param.gpu_id + d_idx) % n_devices;
+      dList[d_idx]=device_idx;
+    }
     
-#ifdef _NCCL
+#if(NCCL)
     // initialize nccl
 
     comms.resize(n_devices);
@@ -336,7 +338,7 @@ void GPUHistBuilder::BuildHist(int depth) {
   time.printElapsed("Add Time");
 
 
-#ifdef _NCCL
+#if(NCCL)
   // (in-place) reduce each element of histogram (for only current level) across multiple gpus
   //  fprintf(stderr,"sizeof(gpu_gpair)/sizeof(float)=%d\n",sizeof(gpu_gpair)/sizeof(float));
   for(int d_idx=0;d_idx<n_devices;d_idx++){
@@ -590,7 +592,7 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
   dh::safe_nccl(ncclCommInitAll(find_split_comms.data(), find_split_n_devices, dList.data())); // initialize communicator (One communicator per process)
   dh::synchronize_n_devices(find_split_n_devices, dList);
   
-#ifdef _NCCL 
+#if(NCCL) 
   for(int d_idx=0;d_idx<find_split_n_devices;d_idx++){
     int device_idx = dList[d_idx];
     dh::safe_cuda(cudaSetDevice(device_idx));

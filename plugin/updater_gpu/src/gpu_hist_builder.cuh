@@ -10,7 +10,12 @@
 #include "../../src/tree/param.h"
 #include "device_helpers.cuh"
 #include "types.cuh"
+
+#define NCCL 1
+
+#if(NCCL)
 #include "nccl.h"
+#endif
 
 namespace xgboost {
 
@@ -85,13 +90,13 @@ class GPUHistBuilder {
   bool initialised;
   bool is_dense;
   const DMatrix *p_last_fmat_;
+  bool prediction_cache_initialised;
 
   // choose which memory type to use (DEVICE or DEVICE_MANAGED)
   dh::bulk_allocator<dh::memory_type::DEVICE> ba;
   //dh::bulk_allocator<dh::memory_type::DEVICE_MANAGED> ba;
   dh::CubMemory cub_mem;
 
-  bool prediction_cache_initialised;
 
   std::vector<int> feature_set_tree;
   std::vector<int> feature_set_level;
@@ -122,7 +127,7 @@ class GPUHistBuilder {
   std::vector<dh::dvec<float>> gidx_fvalue_map;
 
   std::vector<cudaStream_t*> streams;
-#ifdef _NCCL
+#if(NCCL)
   std::vector<ncclComm_t> comms;
 #endif
 };

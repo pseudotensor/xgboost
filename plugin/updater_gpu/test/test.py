@@ -103,7 +103,7 @@ class TestGPU(unittest.TestCase):
 
 
     def test_grow_gpu_hist(self):
-        n_gpus=-1
+        n_gpus=1
         tm._skip_if_no_sklearn()
         from sklearn.datasets import load_digits
         try:

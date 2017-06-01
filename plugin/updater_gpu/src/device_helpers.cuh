@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#define _NCCL 1
+#define NCCL 1
 
 // Uncomment to enable
 //#define DEVICE_TIMER
@@ -45,7 +45,7 @@ inline cudaError_t throw_on_cuda_error(cudaError_t code, const char *file,
 
 #define safe_nccl(ans) throw_on_nccl_error((ans), __FILE__, __LINE__)
 
-#ifdef _NCCL
+#if(NCCL)
 inline ncclResult_t throw_on_nccl_error(ncclResult_t code, const char *file,
                                        int line) {
   if (code != ncclSuccess) {
