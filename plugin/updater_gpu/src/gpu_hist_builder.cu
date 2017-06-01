@@ -60,7 +60,7 @@ HistBuilder::HistBuilder(gpu_gpair* ptr, int n_bins)
 
 __device__ void HistBuilder::Add(gpu_gpair gpair, int gidx, int nidx) const {
   int hist_idx = nidx * n_bins + gidx;
-  atomicAdd(&(d_hist[hist_idx]._grad), gpair._grad);
+  atomicAdd(&(d_hist[hist_idx]._grad), gpair._grad); // OPTMARK: This and below line lead to about 3X slowdown due to memory dependency and access pattern issues.
   atomicAdd(&(d_hist[hist_idx]._hess), gpair._hess);
 }
 
@@ -313,8 +313,8 @@ void GPUHistBuilder::BuildHist(int depth) {
     
     dh::launch_n(device_idx, end-begin, [=] __device__(int local_idx) {
         
-        int ridx = d_ridx[local_idx];
-        int nidx = d_position[ridx-row_begin];
+        int ridx = d_ridx[local_idx]; // OPTMARK: latency
+        int nidx = d_position[ridx-row_begin]; // OPTMARK: latency
         if (!is_active(nidx, depth)) return;
 
         // Only increment smallest node
@@ -326,7 +326,7 @@ void GPUHistBuilder::BuildHist(int depth) {
         int gidx = d_gidx[local_idx];
         gpu_gpair gpair = d_gpair[ridx-row_begin];
         
-        hist_builder.Add(gpair, gidx, nidx);
+        hist_builder.Add(gpair, gidx, nidx); // OPTMARK: This is slow, could use shared memory or cache results intead of writing to global memory every time in atomic way.
       });
   }
 
@@ -379,7 +379,7 @@ void GPUHistBuilder::BuildHist(int depth) {
           gpu_gpair parent = hist_builder.Get(gidx, parent_nidx(nidx));
           int other_nidx = left_smallest ? nidx - 1 : nidx + 1;
           gpu_gpair other = hist_builder.Get(gidx, other_nidx);
-          hist_builder.Add(parent - other, gidx, nidx);
+          hist_builder.Add(parent - other, gidx, nidx); // OPTMARK: This is slow, could use shared memory or cache results intead of writing to global memory every time in atomic way.
         });
     }
     dh::synchronize_n_devices(n_devices, dList);
@@ -823,6 +823,7 @@ void GPUHistBuilder::UpdatePositionSparse(int depth) {
 
 
     // Update node based on fvalue where exists
+    // OPTMARK: This kernel is very inefficient for both compute and memory, dominated by memory dependency / access patterns
     dh::launch_n(device_idx, element_end - element_begin, [=] __device__(int local_idx) {
         int ridx = d_ridx[local_idx];
         NodeIdT pos = d_position[ridx-row_begin];
@@ -837,7 +838,7 @@ void GPUHistBuilder::UpdatePositionSparse(int depth) {
         }
 
         int gidx = d_gidx[local_idx];
-        int findex = d_gidx_feature_map[gidx];
+        int findex = d_gidx_feature_map[gidx]; // OPTMARK: slowest global memory access, maybe setup position, gidx, etc. as combined structure?
 
         if (findex == node.split.findex) {
           float fvalue = d_gidx_fvalue_map[gidx];
