@@ -16,7 +16,7 @@
 #include <vector>
 
 #ifndef NCCL
-#define NCCL 0
+#define NCCL 1
 #endif
 
 #if(NCCL)
