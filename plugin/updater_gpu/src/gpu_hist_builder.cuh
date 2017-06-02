@@ -96,7 +96,7 @@ class GPUHistBuilder {
 
   // choose which memory type to use (DEVICE or DEVICE_MANAGED)
   dh::bulk_allocator<dh::memory_type::DEVICE> ba;
-  //dh::bulk_allocator<dh::memory_type::DEVICE_MANAGED> ba;
+  //  dh::bulk_allocator<dh::memory_type::DEVICE_MANAGED> ba; // can't be used with NCCL
   dh::CubMemory cub_mem;
 
 
