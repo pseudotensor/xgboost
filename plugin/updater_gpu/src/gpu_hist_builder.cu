@@ -312,7 +312,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
 
 void GPUHistBuilder::BuildHist(int depth) {
 
-  dh::Timer time;
+  //  dh::Timer time;
   
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
@@ -349,7 +349,7 @@ void GPUHistBuilder::BuildHist(int depth) {
   //  dh::safe_cuda(cudaDeviceSynchronize());
   dh::synchronize_n_devices(n_devices, dList);
 
-  time.printElapsed("Add Time");
+  //  time.printElapsed("Add Time");
 
 
 #if(NCCL)
@@ -372,7 +372,7 @@ void GPUHistBuilder::BuildHist(int depth) {
   // if no NCCL, then presume only 1 GPU, then already correct
 #endif
   
-  time.printElapsed("Reduce-Add Time");
+  //  time.printElapsed("Reduce-Add Time");
   
   // Subtraction trick (applied to all devices in same way -- to avoid doing on master and then Bcast)
   if (depth > 0) {
@@ -954,26 +954,26 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
   this->InitData(gpair, *p_fmat, *p_tree);
   this->InitFirstNode(gpair);
   this->ColSampleTree();
-  long long int elapsed=0;
+  //  long long int elapsed=0;
   for (int depth = 0; depth < param.max_depth; depth++) {
 
     this->ColSampleLevel();
 
-    dh::Timer time;
+    //    dh::Timer time;
     this->BuildHist(depth);
-    elapsed+=time.elapsed();
-    printf("depth=%d\n",depth);
-    time.printElapsed("BH Time");
+    //    elapsed+=time.elapsed();
+    //    printf("depth=%d\n",depth);
+    //    time.printElapsed("BH Time");
 
-    dh::Timer timesplit;
+    //    dh::Timer timesplit;
     this->FindSplit(depth);
-    timesplit.printElapsed("FS Time");
+    //    timesplit.printElapsed("FS Time");
 
-    dh::Timer timeupdatepos;
+    //    dh::Timer timeupdatepos;
     this->UpdatePosition(depth);
-    timeupdatepos.printElapsed("UP Time");
+    //    timeupdatepos.printElapsed("UP Time");
   }
-  printf("Total BuildHist Time=%lld\n",elapsed);
+  //  printf("Total BuildHist Time=%lld\n",elapsed);
 
   // done with multi-GPU, pass back result from master to tree on host
   int master_device=dList[0];
