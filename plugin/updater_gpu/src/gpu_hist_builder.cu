@@ -76,12 +76,19 @@ GPUHistBuilder::GPUHistBuilder()
 
 GPUHistBuilder::~GPUHistBuilder() {
 #if(NCCL)
-  for(int d_idx=0; d_idx<n_devices; ++d_idx)
-    {
+  if(initialised){
+    for(int d_idx=0; d_idx<n_devices; ++d_idx){
       ncclCommDestroy(comms[d_idx]);
+
       dh::safe_cuda(cudaSetDevice(dList[d_idx]));
       dh::safe_cuda(cudaStreamDestroy(*(streams[d_idx])));
     }
+    for (int num_d = 1; num_d <= n_devices; ++num_d) { // loop over number of devices used
+      for(int d_idx=0; d_idx<n_devices; ++d_idx){
+        ncclCommDestroy(find_split_comms[num_d-1][d_idx]);
+      }
+    }
+  }
 #endif
   
 }
