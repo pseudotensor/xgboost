@@ -703,7 +703,31 @@ void GPUHistBuilder::LaunchFindSplit(int depth){
 
 void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
 
+#ifdef _WIN32
+  // Visual studio complains about C:/Program Files (x86)/Microsoft Visual Studio 14.0/VC/bin/../../VC/INCLUDE\utility(445): error : static assertion failed with "tuple index out of bounds"
+  // and C:/Program Files (x86)/Microsoft Visual Studio 14.0/VC/bin/../../VC/INCLUDE\future(1888): error : no instance of function template "std::_Invoke_stored" matches the argument list
+  std::vector<gpu_gpair> future_results(n_devices);
+  for(int d_idx=0;d_idx<n_devices;d_idx++){
+    int device_idx = dList[d_idx];
+    
+    auto begin        = device_gpair[d_idx].tbegin();
+    auto end          = device_gpair[d_idx].tend();
+    gpu_gpair init = gpu_gpair();
+    auto binary_op    = thrust::plus<gpu_gpair>();
+
+    dh::safe_cuda(cudaSetDevice(device_idx));
+    future_results[d_idx] = thrust::reduce(begin, end, init, binary_op);
+  }
+  
+  // sum over devices on host (with blocking get())
+  gpu_gpair sum=gpu_gpair();
+  for(int d_idx=0;d_idx<n_devices;d_idx++){
+    int device_idx = dList[d_idx];
+    sum+=future_results[d_idx];
+  }
+#else
   // asynch reduce per device
+  
   std::vector<std::future<gpu_gpair>> future_results(n_devices);
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
@@ -721,13 +745,14 @@ void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair> &gpair) {
                                                            return thrust::reduce(begin, end, init, binary_op);
                                                          });
   }
-
+  
   // sum over devices on host (with blocking get())
   gpu_gpair sum=gpu_gpair();
   for(int d_idx=0;d_idx<n_devices;d_idx++){
     int device_idx = dList[d_idx];
     sum+=future_results[d_idx].get();
   }
+#endif
 
   // Setup first node so all devices have same first node (here done same on all devices, or could have done one device and Bcast if worried about exact precision issues)
   for(int d_idx=0;d_idx<n_devices;d_idx++){
