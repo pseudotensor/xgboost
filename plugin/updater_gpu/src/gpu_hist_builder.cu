@@ -297,7 +297,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
 
     device_gpair[d_idx].copy(gpair.begin()+device_row_segments[d_idx],gpair.begin()+device_row_segments[d_idx+1]);
     
-    subsample_gpair(&device_gpair[d_idx], param.subsample);
+    subsample_gpair(&device_gpair[d_idx], param.subsample, device_row_segments[d_idx]);
 
     hist_vec[d_idx].Reset(device_idx);
 
@@ -923,6 +923,7 @@ void GPUHistBuilder::ColSampleLevel() {
 
     feature_flags[d_idx] = h_feature_flags;
   }
+  dh::synchronize_n_devices(n_devices, dList);
 }
 
 

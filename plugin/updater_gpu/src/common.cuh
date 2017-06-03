@@ -142,7 +142,7 @@ inline void dense2sparse_tree(RegTree* p_tree,
 }
 
 // Set gradient pair to 0 with p = 1 - subsample
-  inline void subsample_gpair(dh::dvec<gpu_gpair>* p_gpair, float subsample) {
+  inline void subsample_gpair(dh::dvec<gpu_gpair>* p_gpair, float subsample, int offset) {
   if (subsample == 1.0) {
     return;
   }
@@ -153,11 +153,19 @@ inline void dense2sparse_tree(RegTree* p_tree,
   dh::BernoulliRng rng(subsample, common::GlobalRandom()());
 
   dh::launch_n(gpair.device_idx(), gpair.size(), [=] __device__(int i) {
-    if (!rng(i)) {
+    if (!rng(i+offset)) {
       d_gpair[i] = gpu_gpair();
     }
   });
 }
+
+
+  // Set gradient pair to 0 with p = 1 - subsample
+  inline void subsample_gpair(dh::dvec<gpu_gpair>* p_gpair, float subsample) {
+	  int offset = 0;
+	  subsample_gpair(p_gpair, subsample, offset);
+  }
+
 
 inline std::vector<int> col_sample(std::vector<int> features, float colsample) {
   int n = colsample * features.size();
