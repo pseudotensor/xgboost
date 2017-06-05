@@ -70,8 +70,7 @@ replacing <MY_CUB_DIRECTORY> with a directory of your choice.
 On Linux, NVIDIA NCCL should be installed from: https://github.com/NVIDIA/nccl , installing as:
 
 ```bash
-#git clone https://github.com/NVIDIA/nccl.git
-git clone https://github.com/h2oai/nccl-windows # for windows support, which may eventually make it into the original repo.
+git clone https://github.com/NVIDIA/nccl.git
 cd nccl
 make
 sudo ln -s /usr/local/cuda/lib64 /usr/local/cuda/lib/
@@ -81,9 +80,22 @@ sudo chmod a+r /usr/local/cuda/lib64/*nccl*
 ```
 This ensures nccl is installed in same location as cuda libraries.
 
-On Windows, use the xgboost/windows/nccl.sln file in visual studio and build as release x64.  Copy windows\x64\Release/nccl.dll nccl.exp and nccl.lib to C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\lib\x64 or wherever you installed CUDA Toolkit in windows.  Copy src/nccl.h to C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include .
+On Windows, NVIDIA NCCL is installed as:
+```bash
+# for windows support, which may eventually make it into the original repo.
+git clone https://github.com/h2oai/nccl-windows
+cd nccl
+make
+sudo ln -s /usr/local/cuda/lib64 /usr/local/cuda/lib/
+sudo make PREFIX=/usr/local/cuda/
+sudo chmod a+r /usr/local/cuda/include/nccl*
+sudo chmod a+r /usr/local/cuda/lib64/*nccl*
+```
+This ensures nccl is installed in same location as cuda libraries.
 
-To include NCCL (and hence Multi-GPU support) switch NCCL 0 to NCCL 1 in xgboost/plugin/updater_gpu/src/gpu_hist_builder.cuh and xgboost/plugin/updater_gpu/src/device_helpers.cuh and in xgboost/CMakelists.txt uncomment line with target_link_libraries(updater_gpu nccl) so the nccl library is loaded.
+On Windows, use the xgboost/windows/nccl.sln file in visual studio and build as release x64.  Copy windows\x64\Release/nccl.dll nccl.exp and nccl.lib to C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\lib\x64 or wherever you installed CUDA Toolkit in windows.  Copy src/nccl.h to C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include .  You may have to copy these libraries to your path.
+
+To include NCCL (and hence Multi-GPU support) ensure NCCL 1 in xgboost/plugin/updater_gpu/src/gpu_hist_builder.cuh and xgboost/plugin/updater_gpu/src/device_helpers.cuh and in xgboost/CMakelists.txt uncomment line with target_link_libraries(updater_gpu nccl) so the nccl library is loaded.  If you don't want to install NCCL and multi-GPU support, set NCCL 0 in those locations.
 
 ## Build
 To use the plugin xgboost must be built using cmake specifying the option PLUGIN_UPDATER_GPU=ON. The location of the CUB library must also be specified with the cmake variable CUB_DIRECTORY. CMake will prepare a build system depending on which platform you are on.
