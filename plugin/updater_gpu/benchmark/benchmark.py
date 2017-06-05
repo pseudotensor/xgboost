@@ -25,11 +25,11 @@ def run_benchmark(args, gpu_algorithm, cpu_algorithm):
     xgb.train(param, dtrain, args.iterations)
     print ("Time: %s seconds" % (str(time.time() - tmp)))
 
-    param['updater'] = cpu_algorithm
-    print("Training with '%s'" % param['updater'])
-    tmp = time.time()
-    xgb.train(param, dtrain, args.iterations)
-    print ("Time: %s seconds" % (str(time.time() - tmp)))
+#    param['updater'] = cpu_algorithm
+#    print("Training with '%s'" % param['updater'])
+#    tmp = time.time()
+#    xgb.train(param, dtrain, args.iterations)
+#    print ("Time: %s seconds" % (str(time.time() - tmp)))
 
 
 
