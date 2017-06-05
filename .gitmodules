@@ -7,3 +7,6 @@
 [submodule "nccl"]
 	path = nccl
 	url = https://github.com/h2oai/nccl
+[submodule "cub"]
+	path = cub
+	url = https://github.com/NVlabs/cub

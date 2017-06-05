@@ -52,7 +52,7 @@ Training time time on 1000000 rows x 50 columns with 500 boosting iterations on 
 ## Test
 To run tests:
 ```bash
-$ python -m nose test/
+$ python -m nose test/python/
 ```
 ## Dependencies
 A CUDA capable GPU with at least compute capability >= 3.5 (the algorithm depends on shuffle and vote instructions introduced in Kepler).
@@ -98,15 +98,17 @@ On Windows, use the xgboost/windows/nccl.sln file in visual studio and build as 
 To include NCCL (and hence Multi-GPU support) ensure NCCL 1 in xgboost/plugin/updater_gpu/src/gpu_hist_builder.cuh and xgboost/plugin/updater_gpu/src/device_helpers.cuh and in xgboost/CMakelists.txt uncomment line with target_link_libraries(updater_gpu nccl) so the nccl library is loaded.  If you don't want to install NCCL and multi-GPU support, set NCCL 0 in those locations.
 
 ## Build
-To use the plugin xgboost must be built using cmake specifying the option PLUGIN_UPDATER_GPU=ON. The location of the CUB library must also be specified with the cmake variable CUB_DIRECTORY. CMake will prepare a build system depending on which platform you are on.
 
 From the command line on Linux starting from the xgboost directory:
 
+On Linux, from the xgboost directory:
 ```bash
 $ mkdir build
 $ cd build
-$ cmake .. -DPLUGIN_UPDATER_GPU=ON -DCUB_DIRECTORY=<MY_CUB_DIRECTORY>
+$ cmake .. -DPLUGIN_UPDATER_GPU=ON
+$ make
 ```
+If 'make' fails try invoking make again. There can sometimes be problems with the order items are built.
 
 On Windows using cmake, see what options for Generators you have for cmake, and choose one with [arch] replaced by Win64:
 ```bash
@@ -118,11 +120,24 @@ $ cmake .. -G"Visual Studio 14 2015 Win64" -DPLUGIN_UPDATER_GPU=ON -DCUB_DIRECTO
 ```
 where visual studio community 2015, supported by cuda toolkit (http://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/#axzz4isREr2nS), can be downloaded from: https://my.visualstudio.com/Downloads?q=Visual%20Studio%20Community%202015 .  You may also be able to use a later version of visual studio depending on whether the CUDA toolkit supports it.  Note that Mingw cannot be used with cuda.
 
-On linux cmake will generate a Makefile in the build directory. Invoking the command 'make' from this directory will build the project. If the build fails try invoking make again. There can sometimes be problems with the order items are built.
+### Using make
+Now, it also supports the usual 'make' flow to build gpu-enabled tree construction plugins. It's currently only tested on Linux. From the xgboost directory
+```bash
+# make sure CUDA SDK bin directory is in the 'PATH' env variable
+$ make PLUGIN_UPDATER_GPU=ON
+```
 
-On Windows cmake will generate an xgboost.sln solution file in the build directory. Build this solution in release mode. This is also a good time to check it is being built as x64. If not make sure the cmake generator is set correctly.
+### For Developers!
 
-The build process generates an xgboost library and executable as normal but containing the GPU tree construction algorithm.
+Now, some of the code-base inside gpu plugins have googletest unit-tests inside 'tests/'.
+They can be enabled run along with other unit-tests inside '<xgboostRoot>/tests/cpp' using:
+```bash
+# make sure CUDA SDK bin directory is in the 'PATH' env variable
+# below 2 commands need only be executed once
+$ source ./dmlc-core/scripts/travis/travis_setup_env.sh
+$ make -f dmlc-core/scripts/packages.mk gtest
+$ make PLUGIN_UPDATER_GPU=ON GTEST_PATH=${CACHE_PREFIX} test
+```
 
 ## Changelog
 ##### 2017/6/5
@@ -130,10 +145,14 @@ The build process generates an xgboost library and executable as normal but cont
 * Multi-GPU support for histogram method using NVIDIA NCCL.
 
 ## Changelog
+##### 2017/5/31
+* Faster version of the grow_gpu plugin
+* Added support for building gpu plugin through 'make' flow too
+
+## Changelog
 ##### 2017/5/19
 * Further performance enhancements for histogram method.
 
-## Changelog
 ##### 2017/5/5
 * Histogram performance improvements
 * Fix gcc build issues 
