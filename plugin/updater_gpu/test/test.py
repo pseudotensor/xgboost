@@ -278,6 +278,20 @@ class TestGPU(unittest.TestCase):
                 if max_bin>32:
                     assert res['train']['auc'][0] >= 0.85
                 
+	######################################################################
+        # fail-safe test for max_bin=2
+        param = {'objective': 'binary:logistic',
+                 'updater': 'grow_gpu_hist',
+                 'max_depth': 2,
+                 'n_gpus': n_gpus,
+                 'eval_metric': 'auc',
+                 'max_bin': 2}
+        res = {}
+        xgb.train(param, dtrain2, num_rounds, [(dtrain2, 'train')], evals_result=res)
+        assert self.non_decreasing(res['train']['auc'])
+        if max_bin>32:
+            assert res['train']['auc'][0] >= 0.85
+        
         
     def non_decreasing(self, L):
             return all((x - y) < 0.001 for x, y in zip(L, L[1:]))
