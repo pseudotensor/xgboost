@@ -1,11 +1,11 @@
 /*!
  * Copyright 2016 Rory mitchell
  */
-#include "gpu_builder.cuh"
+
+#include <stdio.h>
 #include <cub/cub.cuh>
 #include <cuda_profiler_api.h>
 #include <cuda_runtime.h>
-#include <stdio.h>
 #include <thrust/count.h>
 #include <thrust/device_vector.h>
 #include <thrust/gather.h>
@@ -15,12 +15,13 @@
 #include <numeric>
 #include <random>
 #include <vector>
-#include "../../../src/common/random.h"
 #include "common.cuh"
 #include "device_helpers.cuh"
 #include "find_split.cuh"
+#include "gpu_builder.cuh"
 #include "gpu_data.cuh"
 #include "types.cuh"
+#include "../../../src/common/random.h"
 
 namespace xgboost {
 namespace tree {
@@ -32,7 +33,8 @@ void GPUBuilder::Init(const TrainParam& param_in) {
 
   dh::safe_cuda(cudaSetDevice(param.gpu_id));
   if (!param.silent) {
-    LOG(CONSOLE) << "Device: [" << param.gpu_id << "] " << dh::device_name(param.gpu_id);
+    LOG(CONSOLE) << "Device: [" << param.gpu_id << "] "
+                 << dh::device_name(param.gpu_id);
   }
 }
 
@@ -42,23 +44,24 @@ void GPUBuilder::UpdateNodeId(int level) {
   auto* d_node_id_instance = gpu_data->node_id_instance.data();
   Node* d_nodes = gpu_data->nodes.data();
 
-  dh::launch_n(gpu_data->node_id_instance.device_idx(), gpu_data->node_id_instance.size(), [=] __device__(int i) {
-    NodeIdT item_node_id = d_node_id_instance[i];
+  dh::launch_n(gpu_data->node_id_instance.device_idx(),
+               gpu_data->node_id_instance.size(), [=] __device__(int i) {
+                 NodeIdT item_node_id = d_node_id_instance[i];
 
-    if (item_node_id < 0) {
-      return;
-    }
+                 if (item_node_id < 0) {
+                   return;
+                 }
 
-    Node node = d_nodes[item_node_id];
+                 Node node = d_nodes[item_node_id];
 
-    if (node.IsLeaf()) {
-      d_node_id_instance[i] = -1;
-    } else if (node.split.missing_left) {
-      d_node_id_instance[i] = item_node_id * 2 + 1;
-    } else {
-      d_node_id_instance[i] = item_node_id * 2 + 2;
-    }
-  });
+                 if (node.IsLeaf()) {
+                   d_node_id_instance[i] = -1;
+                 } else if (node.split.missing_left) {
+                   d_node_id_instance[i] = item_node_id * 2 + 1;
+                 } else {
+                   d_node_id_instance[i] = item_node_id * 2 + 2;
+                 }
+               });
 
   dh::safe_cuda(cudaDeviceSynchronize());
 
@@ -68,32 +71,33 @@ void GPUBuilder::UpdateNodeId(int level) {
   auto* d_feature_id = gpu_data->feature_id.data();
 
   // Update node based on fvalue where exists
-  dh::launch_n(gpu_data->fvalues.device_idx(), gpu_data->fvalues.size(), [=] __device__(int i) {
-    NodeIdT item_node_id = d_node_id[i];
+  dh::launch_n(gpu_data->fvalues.device_idx(), gpu_data->fvalues.size(),
+               [=] __device__(int i) {
+                 NodeIdT item_node_id = d_node_id[i];
 
-    if (item_node_id < 0) {
-      return;
-    }
+                 if (item_node_id < 0) {
+                   return;
+                 }
 
-    Node node = d_nodes[item_node_id];
+                 Node node = d_nodes[item_node_id];
 
-    if (node.IsLeaf()) {
-      return;
-    }
+                 if (node.IsLeaf()) {
+                   return;
+                 }
 
-    int feature_id = d_feature_id[i];
+                 int feature_id = d_feature_id[i];
 
-    if (feature_id == node.split.findex) {
-      float fvalue = d_fvalues[i];
-      bst_uint instance_id = d_instance_id[i];
+                 if (feature_id == node.split.findex) {
+                   float fvalue = d_fvalues[i];
+                   bst_uint instance_id = d_instance_id[i];
 
-      if (fvalue < node.split.fvalue) {
-        d_node_id_instance[instance_id] = item_node_id * 2 + 1;
-      } else {
-        d_node_id_instance[instance_id] = item_node_id * 2 + 2;
-      }
-    }
-  });
+                   if (fvalue < node.split.fvalue) {
+                     d_node_id_instance[instance_id] = item_node_id * 2 + 1;
+                   } else {
+                     d_node_id_instance[instance_id] = item_node_id * 2 + 2;
+                   }
+                 }
+               });
 
   dh::safe_cuda(cudaDeviceSynchronize());
 

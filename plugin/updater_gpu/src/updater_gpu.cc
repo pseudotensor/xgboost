@@ -76,7 +76,7 @@ class GPUHistMaker : public TreeUpdater {
   }
 
   bool UpdatePredictionCache(const DMatrix* data,
-    std::vector<bst_float>* out_preds) override {
+                             std::vector<bst_float>* out_preds) override {
     return builder.UpdatePredictionCache(data, out_preds);
   }
 

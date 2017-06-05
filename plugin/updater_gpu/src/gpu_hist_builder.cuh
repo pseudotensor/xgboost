@@ -15,7 +15,7 @@
 #define NCCL 1
 #endif
 
-#if(NCCL)
+#if (NCCL)
 #include "nccl.h"
 #endif
 
@@ -23,11 +23,11 @@ namespace xgboost {
 
 namespace tree {
 
-  
 struct DeviceGMat {
   dh::dvec<int> gidx;
   dh::dvec<int> ridx;
-  void Init(int device_idx, const common::GHistIndexMatrix& gmat, bst_uint begin, bst_uint end);
+  void Init(int device_idx, const common::GHistIndexMatrix &gmat,
+            bst_uint begin, bst_uint end);
 };
 
 struct HistBuilder {
@@ -96,9 +96,9 @@ class GPUHistBuilder {
 
   // choose which memory type to use (DEVICE or DEVICE_MANAGED)
   dh::bulk_allocator<dh::memory_type::DEVICE> ba;
-  //  dh::bulk_allocator<dh::memory_type::DEVICE_MANAGED> ba; // can't be used with NCCL
+  //  dh::bulk_allocator<dh::memory_type::DEVICE_MANAGED> ba; // can't be used
+  //  with NCCL
   dh::CubMemory cub_mem;
-
 
   std::vector<int> feature_set_tree;
   std::vector<int> feature_set_level;
@@ -128,8 +128,8 @@ class GPUHistBuilder {
   std::vector<dh::dvec<int>> gidx_feature_map;
   std::vector<dh::dvec<float>> gidx_fvalue_map;
 
-  std::vector<cudaStream_t*> streams;
-#if(NCCL)
+  std::vector<cudaStream_t *> streams;
+#if (NCCL)
   std::vector<ncclComm_t> comms;
   std::vector<std::vector<ncclComm_t>> find_split_comms;
 #endif

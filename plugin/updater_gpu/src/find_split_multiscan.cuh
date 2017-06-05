@@ -2,19 +2,19 @@
  * Copyright 2016 Rory mitchell
 */
 #pragma once
-#include <cub/cub.cuh>
 #include <xgboost/base.h>
+#include <cub/cub.cuh>
+#include "common.cuh"
 #include "device_helpers.cuh"
 #include "gpu_data.cuh"
 #include "types.cuh"
-#include "common.cuh"
 
 namespace xgboost {
 namespace tree {
 
 typedef uint64_t BitFlagSet;
 
-__device__ __inline__ void set_bit(BitFlagSet &bf, int index) { // NOLINT
+__device__ __inline__ void set_bit(BitFlagSet &bf, int index) {  // NOLINT
   bf |= 1 << index;
 }
 
@@ -71,7 +71,8 @@ struct ReduceParamsMultiscan {
   };
 };
 
-template <typename ParamsT> struct ReduceEnactorMultiscan {
+template <typename ParamsT>
+struct ReduceEnactorMultiscan {
   typedef cub::WarpReduce<gpu_gpair> WarpReduceT;
 
   struct _TempStorage {
@@ -97,11 +98,13 @@ template <typename ParamsT> struct ReduceEnactorMultiscan {
   const int node_begin;
 
   __device__ __forceinline__
-  ReduceEnactorMultiscan(TempStorage &temp_storage, // NOLINT
-                         Reduction &reduction,      // NOLINT
+  ReduceEnactorMultiscan(TempStorage &temp_storage,  // NOLINT
+                         Reduction &reduction,       // NOLINT
                          const ItemIter item_iter, const int node_begin)
-      : temp_storage(temp_storage.Alias()), reduction(reduction.Alias()),
-        item_iter(item_iter), node_begin(node_begin) {}
+      : temp_storage(temp_storage.Alias()),
+        reduction(reduction.Alias()),
+        item_iter(item_iter),
+        node_begin(node_begin) {}
 
   __device__ __forceinline__ void ResetPartials() {
     if (threadIdx.x < ParamsT::N_WARPS) {
@@ -224,8 +227,8 @@ struct FindSplitEnactorMultiscan {
     Split warp_best_splits[ParamsT::N_NODES][ParamsT::N_WARPS];
     gpu_gpair partial_sums[ParamsT::N_NODES][ParamsT::N_WARPS];
     gpu_gpair top_level_sum[ParamsT::N_NODES];  // Sum of current partial sums
-    gpu_gpair tile_carry[ParamsT::N_NODES];    // Contains top-level sums from
-                                               // previous tiles
+    gpu_gpair tile_carry[ParamsT::N_NODES];     // Contains top-level sums from
+                                                // previous tiles
     Split best_splits[ParamsT::N_NODES];
     // Cache current level nodes into shared memory
     float node_root_gain[ParamsT::N_NODES];
@@ -250,14 +253,19 @@ struct FindSplitEnactorMultiscan {
   FlagPrefixCallbackOp flag_prefix_op;
 
   __device__ __forceinline__ FindSplitEnactorMultiscan(
-      TempStorage &temp_storage, const ItemIter item_iter, // NOLINT
+      TempStorage &temp_storage, const ItemIter item_iter,  // NOLINT
       Split *d_split_candidates_out, const Node *d_nodes,
       const NodeIdT node_begin, const GPUTrainingParam &param,
       const ReductionT reduction, const int level)
-      : temp_storage(temp_storage.Alias()), item_iter(item_iter),
-        d_split_candidates_out(d_split_candidates_out), d_nodes(d_nodes),
-        node_begin(node_begin), param(param), reduction(reduction),
-        level(level), flag_prefix_op() {}
+      : temp_storage(temp_storage.Alias()),
+        item_iter(item_iter),
+        d_split_candidates_out(d_split_candidates_out),
+        d_nodes(d_nodes),
+        node_begin(node_begin),
+        param(param),
+        reduction(reduction),
+        level(level),
+        flag_prefix_op() {}
 
   __device__ __forceinline__ void UpdateTileCarry() {
     if (threadIdx.x < ParamsT::N_NODES) {
@@ -331,9 +339,9 @@ struct FindSplitEnactorMultiscan {
   }
 
   // Is current fvalue different from left fvalue
-  __device__ __forceinline__ bool
-  LeftMostFvalue(const bst_uint &segment_begin, const bst_uint &offset,
-                 const bst_uint &num_remaining) {
+  __device__ __forceinline__ bool LeftMostFvalue(
+      const bst_uint &segment_begin, const bst_uint &offset,
+      const bst_uint &num_remaining) {
     int left_index = offset + threadIdx.x - 1;
     float left_fvalue = left_index >= static_cast<int>(segment_begin) &&
                                 threadIdx.x < num_remaining
@@ -344,9 +352,9 @@ struct FindSplitEnactorMultiscan {
   }
 
   // Prevent splitting in the middle of same valued instances
-  __device__ __forceinline__ bool
-  CheckSplitValid(const bst_uint &segment_begin, const bst_uint &offset,
-                  const bst_uint &num_remaining) {
+  __device__ __forceinline__ bool CheckSplitValid(
+      const bst_uint &segment_begin, const bst_uint &offset,
+      const bst_uint &num_remaining) {
     BitFlagSet bit_flag = 0;
 
     bool valid_split = false;
@@ -398,9 +406,8 @@ struct FindSplitEnactorMultiscan {
 
   // Which thread in this warp should update the current best split, if any
   // Returns true for one thread or none
-  __device__ __forceinline__ bool
-  QueryUpdateWarpSplit(const float &loss_chg,
-                       volatile const float &warp_best_loss) {
+  __device__ __forceinline__ bool QueryUpdateWarpSplit(
+      const float &loss_chg, volatile const float &warp_best_loss) {
     bool update = false;
 
     for (int NODE = 0; NODE < ParamsT::N_NODES; NODE++) {
@@ -458,9 +465,9 @@ struct FindSplitEnactorMultiscan {
     }
   }
 
-  __device__ __forceinline__ void
-  EvaluateSplits(const bst_uint &segment_begin, const bst_uint &offset,
-                 const bst_uint &num_remaining) {
+  __device__ __forceinline__ void EvaluateSplits(
+      const bst_uint &segment_begin, const bst_uint &offset,
+      const bst_uint &num_remaining) {
     bool valid_split = CheckSplitValid(segment_begin, offset, num_remaining);
 
     bool thread_active =
@@ -639,14 +646,14 @@ struct FindSplitEnactorMultiscan {
 template <typename FindSplitParamsT, typename ReduceParamsT>
 __global__ void
 #if __CUDA_ARCH__ <= 530
-__launch_bounds__(1024, 2)
+    __launch_bounds__(1024, 2)
 #endif
-    find_split_candidates_multiscan_kernel(
-        const ItemIter items_iter, Split *d_split_candidates_out,
-        const Node *d_nodes, const int node_begin, bst_uint num_items,
-        int num_features, const int *d_feature_offsets,
-        const GPUTrainingParam param, const int *d_feature_flags,
-        const int level) {
+        find_split_candidates_multiscan_kernel(
+            const ItemIter items_iter, Split *d_split_candidates_out,
+            const Node *d_nodes, const int node_begin, bst_uint num_items,
+            int num_features, const int *d_feature_offsets,
+            const GPUTrainingParam param, const int *d_feature_flags,
+            const int level) {
   if (num_items <= 0 || d_feature_flags[blockIdx.x] != 1) {
     return;
   }
@@ -702,21 +709,21 @@ void find_split_candidates_multiscan_variation(GPUData *data, const int level) {
 void find_split_candidates_multiscan(GPUData *data, const int level) {
   // Select templated variation of split finding algorithm
   switch (level) {
-  case 0:
-    find_split_candidates_multiscan_variation<1>(data, level);
-    break;
-  case 1:
-    find_split_candidates_multiscan_variation<2>(data, level);
-    break;
-  case 2:
-    find_split_candidates_multiscan_variation<4>(data, level);
-    break;
-  case 3:
-    find_split_candidates_multiscan_variation<8>(data, level);
-    break;
-  case 4:
-    find_split_candidates_multiscan_variation<16>(data, level);
-    break;
+    case 0:
+      find_split_candidates_multiscan_variation<1>(data, level);
+      break;
+    case 1:
+      find_split_candidates_multiscan_variation<2>(data, level);
+      break;
+    case 2:
+      find_split_candidates_multiscan_variation<4>(data, level);
+      break;
+    case 3:
+      find_split_candidates_multiscan_variation<8>(data, level);
+      break;
+    case 4:
+      find_split_candidates_multiscan_variation<16>(data, level);
+      break;
   }
 }
 }  // namespace tree

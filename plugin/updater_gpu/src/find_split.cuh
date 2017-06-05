@@ -2,8 +2,8 @@
  * Copyright 2016 Rory mitchell
 */
 #pragma once
-#include <cub/cub.cuh>
 #include <xgboost/base.h>
+#include <cub/cub.cuh>
 #include <vector>
 #include "device_helpers.cuh"
 #include "find_split_multiscan.cuh"
@@ -14,10 +14,9 @@
 namespace xgboost {
 namespace tree {
 
-__global__ void
-reduce_split_candidates_kernel(Split *d_split_candidates, Node *d_current_nodes,
-                               Node *d_new_nodes, int n_current_nodes,
-                               int n_features, const GPUTrainingParam param) {
+__global__ void reduce_split_candidates_kernel(
+    Split *d_split_candidates, Node *d_current_nodes, Node *d_new_nodes,
+    int n_current_nodes, int n_features, const GPUTrainingParam param) {
   int nid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (nid >= n_current_nodes) {
@@ -84,8 +83,9 @@ void colsample_level(GPUData *data, const TrainParam xgboost_param,
   auto d_feature_set = data->feature_set.data();
   auto d_feature_flags = data->feature_flags.data();
 
-  dh::launch_n(data->feature_flags.device_idx(),
-      n, [=] __device__(int i) { d_feature_flags[d_feature_set[i]] = 1; });
+  dh::launch_n(data->feature_flags.device_idx(), n, [=] __device__(int i) {
+    d_feature_flags[d_feature_set[i]] = 1;
+  });
 }
 
 void find_split(GPUData *data, const TrainParam xgboost_param, const int level,
