@@ -21,7 +21,7 @@ n_gpus | &#10006; | &#10004; |
 
 The device ordinal can be selected using the 'gpu_id' parameter, which defaults to 0.
 
-Multiple GPUs can be used with the grow_gpu_hist parameter using the n_gpus parameter, which defaults to -1 (indicating use all visible GPUs).   NVIDIA NCCL is required to be installed.  If gpu_id is specified as non-zero, the gpu device order is mod(gpu_id + i) % n_visible_devices for i=0 to n_gpus-1.
+Multiple GPUs can be used with the grow_gpu_hist parameter using the n_gpus parameter, which defaults to -1 (indicating use all visible GPUs).  If gpu_id is specified as non-zero, the gpu device order is mod(gpu_id + i) % n_visible_devices for i=0 to n_gpus-1.
 
 This plugin currently works with the CLI version and python version.
 
@@ -59,43 +59,11 @@ A CUDA capable GPU with at least compute capability >= 3.5 (the algorithm depend
 
 Building the plug-in requires CUDA Toolkit 7.5 or later (https://developer.nvidia.com/cuda-downloads)
 
-The plugin also depends on CUB 1.6.4 - https://nvlabs.github.io/cub/ . CUB is a header only cuda library which provides sort/reduce/scan primitives.
+submodule: The plugin also depends on CUB 1.6.4 - https://nvlabs.github.io/cub/ . CUB is a header only cuda library which provides sort/reduce/scan primitives.
 
-```bash
-cd <MY_CUB_DIRECTORY>
-git clone https://github.com/NVlabs/cub.git
-```
-replacing <MY_CUB_DIRECTORY> with a directory of your choice.
-
-On Linux, NVIDIA NCCL should be installed from: https://github.com/NVIDIA/nccl , installing as:
-
-```bash
-git clone https://github.com/NVIDIA/nccl.git
-cd nccl
-make
-sudo ln -s /usr/local/cuda/lib64 /usr/local/cuda/lib/
-sudo make PREFIX=/usr/local/cuda/
-sudo chmod a+r /usr/local/cuda/include/nccl*
-sudo chmod a+r /usr/local/cuda/lib64/*nccl*
-```
-This ensures nccl is installed in same location as cuda libraries.
-
-On Windows, NVIDIA NCCL is installed as:
-```bash
-# for windows support, which may eventually make it into the original repo.
-git clone https://github.com/h2oai/nccl-windows
-cd nccl
-make
-sudo ln -s /usr/local/cuda/lib64 /usr/local/cuda/lib/
-sudo make PREFIX=/usr/local/cuda/
-sudo chmod a+r /usr/local/cuda/include/nccl*
-sudo chmod a+r /usr/local/cuda/lib64/*nccl*
-```
-This ensures nccl is installed in same location as cuda libraries.
+submodule: NVIDIA NCCL from https://github.com/NVIDIA/nccl
 
 On Windows, use the xgboost/windows/nccl.sln file in visual studio and build as release x64.  Copy windows\x64\Release/nccl.dll nccl.exp and nccl.lib to C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\lib\x64 or wherever you installed CUDA Toolkit in windows.  Copy src/nccl.h to C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include .  You may have to copy these libraries to your path.
-
-To include NCCL (and hence Multi-GPU support) ensure NCCL 1 in xgboost/plugin/updater_gpu/src/gpu_hist_builder.cuh and xgboost/plugin/updater_gpu/src/device_helpers.cuh and in xgboost/CMakelists.txt uncomment line with target_link_libraries(updater_gpu nccl) so the nccl library is loaded.  If you don't want to install NCCL and multi-GPU support, set NCCL 0 in those locations.
 
 ## Build
 
@@ -106,19 +74,19 @@ On Linux, from the xgboost directory:
 $ mkdir build
 $ cd build
 $ cmake .. -DPLUGIN_UPDATER_GPU=ON
-$ make
+$ make -j
 ```
-If 'make' fails try invoking make again. There can sometimes be problems with the order items are built.
-
 On Windows using cmake, see what options for Generators you have for cmake, and choose one with [arch] replaced by Win64:
 ```bash
 cmake -help
 ```
 Then run cmake as:
 ```bash
-$ cmake .. -G"Visual Studio 14 2015 Win64" -DPLUGIN_UPDATER_GPU=ON -DCUB_DIRECTORY=<MY_CUB_DIRECTORY>
+$ cmake .. -G"Visual Studio 14 2015 Win64" -DPLUGIN_UPDATER_GPU=ON
 ```
 where visual studio community 2015, supported by cuda toolkit (http://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/#axzz4isREr2nS), can be downloaded from: https://my.visualstudio.com/Downloads?q=Visual%20Studio%20Community%202015 .  You may also be able to use a later version of visual studio depending on whether the CUDA toolkit supports it.  Note that Mingw cannot be used with cuda.
+
+### For Developers!
 
 ### Using make
 Now, it also supports the usual 'make' flow to build gpu-enabled tree construction plugins. It's currently only tested on Linux. From the xgboost directory
@@ -126,9 +94,6 @@ Now, it also supports the usual 'make' flow to build gpu-enabled tree constructi
 # make sure CUDA SDK bin directory is in the 'PATH' env variable
 $ make PLUGIN_UPDATER_GPU=ON
 ```
-
-### For Developers!
-
 Now, some of the code-base inside gpu plugins have googletest unit-tests inside 'tests/'.
 They can be enabled run along with other unit-tests inside '<xgboostRoot>/tests/cpp' using:
 ```bash

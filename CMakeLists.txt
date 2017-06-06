@@ -101,13 +101,27 @@ endif()
 set(LINK_LIBRARIES dmlccore rabit)
 
 if(PLUGIN_UPDATER_GPU)
+    # nccl
+    add_subdirectory(nccl)
+    set(NCCL_DIRECTORY ${PROJECT_SOURCE_DIR}/nccl)
+    TARGET_LINK_LIBRARIES(nccl)
+    include_directories(${NCCL_DIRECTORY}/src)
+    set(LINK_LIBRARIES dmlccore rabit nccl)
+
+    # version
+    execute_process(COMMAND bash -c ${PROJECT_SOURCE_DIR}/plugin/updater_gpu/get_cuda_sm.sh OUTPUT_VARIABLE CUDA_SM)
+    #MESSAGE( STATUS "CUDA_SM: " ${CUDA_SM})
+    if(${CUDA_SM} LESS 35)
+      MESSAGE( FATAL_ERROR "CUDA_SM less than 35")
+    endif(${CUDA_SM} LESS 35)
+  
 	#Find cub
-	set(CUB_DIRECTORY "" CACHE PATH "CUB 1.5.4 directory")
+	set(CUB_DIRECTORY ${PROJECT_SOURCE_DIR}/cub/)
 	include_directories(${CUB_DIRECTORY})
     #Find googletest
     set(GTEST_DIRECTORY "${CACHE_PREFIX}" CACHE PATH "Googletest directory")
     include_directories(${GTEST_DIRECTORY}/include)
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-lineinfo;--expt-extended-lambda;-arch=compute_35")
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-lineinfo;--expt-extended-lambda;-arch=compute_${CUDA_SM}")
     if(NOT MSVC)
       set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-Xcompiler -fPIC")
     endif()
@@ -117,11 +131,7 @@ if(PLUGIN_UPDATER_GPU)
     )
     cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})
     set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
-    cuda_add_library(updater_gpu STATIC
-      ${CUDA_SOURCES}
-    )
-    link_directories(/usr/local/cuda/lib64/)
-    TARGET_LINK_LIBRARIES(updater_gpu nccl)
+    cuda_add_library(updater_gpu nccl STATIC ${CUDA_SOURCES})
 else()
     set(CUDA_OBJS "")
 endif()
