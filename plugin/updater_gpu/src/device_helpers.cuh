@@ -400,34 +400,34 @@ class dvec {
  */
 template <typename T>
 class dvec2 {
-  friend bulk_allocator;
 
  private:
   dvec<T> _d1, _d2;
   cub::DoubleBuffer<T> _buff;
+  int _device_idx;
 
-  void external_allocate(void *ptr1, void *ptr2, size_t size) {
+
+ public:
+  void external_allocate(int device_idx, void *ptr1, void *ptr2, size_t size) {
     if (!empty()) {
       throw std::runtime_error("Tried to allocate dvec2 but already allocated");
     }
-    _d1.external_allocate(ptr1, size);
-    _d2.external_allocate(ptr2, size);
+    _d1.external_allocate(_device_idx, ptr1, size);
+    _d2.external_allocate(_device_idx, ptr2, size);
     _buff.d_buffers[0] = static_cast<T *>(ptr1);
     _buff.d_buffers[1] = static_cast<T *>(ptr2);
     _buff.selector = 0;
+    _device_idx = device_idx;
   }
-
- public:
-  dvec2() : _d1(), _d2(), _buff() {}
+  dvec2() : _d1(), _d2(), _buff(), _device_idx(0) {}
 
   size_t size() const { return _d1.size(); }
-
+  int device_idx() const { return _device_idx; }
   bool empty() const { return _d1.empty() || _d2.empty(); }
 
   cub::DoubleBuffer<T> &buff() { return _buff; }
 
   dvec<T> &d1() { return _d1; }
-
   dvec<T> &d2() { return _d2; }
 
   T *current() { return _buff.Current(); }
@@ -499,23 +499,19 @@ class bulk_allocator {
   }
 
   template <typename T, typename SizeT>
-  void allocate_dvec(char *ptr, dvec2<T> *first_vec, SizeT first_size) {
-    first_vec->external_allocate
-        (static_cast<void *>(ptr),
+  void allocate_dvec(int device_idx, char *ptr, dvec2<T> *first_vec, SizeT first_size) {
+    first_vec->external_allocate(device_idx, static_cast<void *>(ptr),
          static_cast<void *>(ptr+align_round_up(first_size * sizeof(T))),
          first_size);
   }
 
   template <typename T, typename SizeT, typename... Args>
-  void allocate_dvec(char *ptr, dvec2<T> *first_vec, SizeT first_size,
+  void allocate_dvec(int device_idx, char *ptr, dvec2<T> *first_vec, SizeT first_size,
                      Args... args) {
-    allocate_dvec<T,SizeT>(ptr, first_vec, first_size);
+    allocate_dvec<T,SizeT>(device_idx, ptr, first_vec, first_size);
     ptr += (align_round_up(first_size * sizeof(T)) * 2);
-    allocate_dvec(ptr, args...);
+    allocate_dvec(device_idx, ptr, args...);
   }
-
- public:
-  bulk_allocator() : _size(0), d_ptr(NULL) {}
 
  public:
   ~bulk_allocator() {

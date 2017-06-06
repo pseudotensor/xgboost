@@ -117,6 +117,11 @@ if(PLUGIN_UPDATER_GPU)
     )
     cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})
     set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
+    cuda_add_library(updater_gpu STATIC
+      ${CUDA_SOURCES}
+    )
+    link_directories(/usr/local/cuda/lib64/)
+    TARGET_LINK_LIBRARIES(updater_gpu nccl)
 else()
     set(CUDA_OBJS "")
 endif()
