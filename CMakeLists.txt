@@ -109,7 +109,12 @@ if(PLUGIN_UPDATER_GPU)
     set(LINK_LIBRARIES dmlccore rabit nccl)
 
     # version
-    execute_process(COMMAND bash -c ${PROJECT_SOURCE_DIR}/plugin/updater_gpu/get_cuda_sm.sh OUTPUT_VARIABLE CUDA_SM)
+    if(MSVC)
+      set(CUDA_SM 35)
+    elseif(MSVC)
+      execute_process(COMMAND bash -c ${PROJECT_SOURCE_DIR}/plugin/updater_gpu/get_cuda_sm.sh OUTPUT_VARIABLE CUDA_SM)
+    endif(MSVC)
+    
     #MESSAGE( STATUS "CUDA_SM: " ${CUDA_SM})
     if(${CUDA_SM} LESS 35)
       MESSAGE( FATAL_ERROR "CUDA_SM less than 35")
