@@ -63,8 +63,6 @@ submodule: The plugin also depends on CUB 1.6.4 - https://nvlabs.github.io/cub/ 
 
 submodule: NVIDIA NCCL from https://github.com/NVIDIA/nccl
 
-On Windows, use the xgboost/windows/nccl.sln file in visual studio and build as release x64.  Copy windows\x64\Release/nccl.dll nccl.exp and nccl.lib to C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\lib\x64 or wherever you installed CUDA Toolkit in windows.  Copy src/nccl.h to C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include .  You may have to copy these libraries to your path.
-
 ## Build
 
 From the command line on Linux starting from the xgboost directory:
@@ -84,7 +82,9 @@ Then run cmake as:
 ```bash
 $ cmake .. -G"Visual Studio 14 2015 Win64" -DPLUGIN_UPDATER_GPU=ON
 ```
-where visual studio community 2015, supported by cuda toolkit (http://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/#axzz4isREr2nS), can be downloaded from: https://my.visualstudio.com/Downloads?q=Visual%20Studio%20Community%202015 .  You may also be able to use a later version of visual studio depending on whether the CUDA toolkit supports it.  Note that Mingw cannot be used with cuda.
+Cmake will generate an xgboost.sln solution file in the build directory. Build this solution in release mode as a x64 build.
+
+Visual studio community 2015, supported by cuda toolkit (http://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/#axzz4isREr2nS), can be downloaded from: https://my.visualstudio.com/Downloads?q=Visual%20Studio%20Community%202015 .  You may also be able to use a later version of visual studio depending on whether the CUDA toolkit supports it.  Note that Mingw cannot be used with cuda.
 
 ### For Developers!
 
