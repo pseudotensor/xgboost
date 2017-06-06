@@ -109,12 +109,10 @@ $ make PLUGIN_UPDATER_GPU=ON GTEST_PATH=${CACHE_PREFIX} test
 
 * Multi-GPU support for histogram method using NVIDIA NCCL.
 
-## Changelog
 ##### 2017/5/31
 * Faster version of the grow_gpu plugin
 * Added support for building gpu plugin through 'make' flow too
 
-## Changelog
 ##### 2017/5/19
 * Further performance enhancements for histogram method.
 
