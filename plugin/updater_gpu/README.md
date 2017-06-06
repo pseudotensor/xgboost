@@ -61,7 +61,7 @@ Building the plug-in requires CUDA Toolkit 7.5 or later (https://developer.nvidi
 
 submodule: The plugin also depends on CUB 1.6.4 - https://nvlabs.github.io/cub/ . CUB is a header only cuda library which provides sort/reduce/scan primitives.
 
-submodule: NVIDIA NCCL from https://github.com/NVIDIA/nccl
+submodule: NVIDIA NCCL from https://github.com/NVIDIA/nccl with windows port allowed by git@github.com:h2oai/nccl.git
 
 ## Build
 
