@@ -129,10 +129,11 @@ $ make PLUGIN_UPDATER_GPU=ON GTEST_PATH=${CACHE_PREFIX} test
 [Mitchell, Rory, and Eibe Frank. Accelerating the XGBoost algorithm using GPU computing. No. e2911v1. PeerJ Preprints, 2017.](https://peerj.com/preprints/2911/)
 
 ## Author
-Rory Mitchell 
+Rory Mitchell
+Jonathan C. McKinney
+Shankara Rao Thejaswi Nanditale
+Vinay Deshpande
+... and the rest of the H2O.ai and NVIDIA team.
 
-Please report bugs to the xgboost/issues page. You can tag me with @RAMitchell.
-
-Otherwise I can be contacted at r.a.mitchell.nz at gmail.
-
+Please report bugs to the xgboost/issues page.
 
