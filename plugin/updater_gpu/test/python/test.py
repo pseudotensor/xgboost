@@ -125,50 +125,50 @@ class TestGPU(unittest.TestCase):
 
                 
             
-        	# regression test --- hist must be same as exact on all-categorial data
-        	ag_param = {'max_depth': max_depth,
-        	            'tree_method': 'exact',
-        	            'nthread': 1,
-        	            'eta': 1,
-        	            'silent': 1,
-        	            'objective': 'binary:logistic',
-        	            'eval_metric': 'auc'}
-        	ag_param2 = {'max_depth': max_depth,
-        	             'updater': 'grow_gpu_hist',
-        	             'eta': 1,
-        	             'silent': 1,
-        	             'n_gpus': 1,
-        	             'objective': 'binary:logistic',
+            # regression test --- hist must be same as exact on all-categorial data
+            ag_param = {'max_depth': max_depth,
+                        'tree_method': 'exact',
+                        'nthread': 1,
+                        'eta': 1,
+                        'silent': 1,
+                        'objective': 'binary:logistic',
+                        'eval_metric': 'auc'}
+            ag_param2 = {'max_depth': max_depth,
+                         'updater': 'grow_gpu_hist',
+                         'eta': 1,
+                         'silent': 1,
+                         'n_gpus': 1,
+                         'objective': 'binary:logistic',
                              'max_bin': max_bin,
-        	             'eval_metric': 'auc'}
-        	ag_param3 = {'max_depth': max_depth,
-        	             'updater': 'grow_gpu_hist',
-        	             'eta': 1,
-        	             'silent': 1,
-        	             'n_gpus': n_gpus,
-    	                     'objective': 'binary:logistic',
+                         'eval_metric': 'auc'}
+            ag_param3 = {'max_depth': max_depth,
+                         'updater': 'grow_gpu_hist',
+                         'eta': 1,
+                         'silent': 1,
+                         'n_gpus': n_gpus,
+                             'objective': 'binary:logistic',
                              'max_bin': max_bin,
-        	             'eval_metric': 'auc'}
-        	ag_res = {}
-        	ag_res2 = {}
-        	ag_res3 = {}
-        	
-        	num_rounds = 10
+                         'eval_metric': 'auc'}
+            ag_res = {}
+            ag_res2 = {}
+            ag_res3 = {}
+            
+            num_rounds = 10
                 eprint("normal updater");
-        	xgb.train(ag_param, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
-        	          evals_result=ag_res)
+            xgb.train(ag_param, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
+                      evals_result=ag_res)
                 eprint("grow_gpu_hist updater 1 gpu");
-        	xgb.train(ag_param2, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
-        	          evals_result=ag_res2)
+            xgb.train(ag_param2, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
+                      evals_result=ag_res2)
                 eprint("grow_gpu_hist updater %d gpus" % (n_gpus));
-        	xgb.train(ag_param3, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
-        	          evals_result=ag_res3)
-        	#        assert 1==0
-        	assert ag_res['train']['auc'] == ag_res2['train']['auc']
-        	assert ag_res['test']['auc'] == ag_res2['test']['auc']
-        	assert ag_res['test']['auc'] == ag_res3['test']['auc']
+            xgb.train(ag_param3, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
+                      evals_result=ag_res3)
+            #        assert 1==0
+            assert ag_res['train']['auc'] == ag_res2['train']['auc']
+            assert ag_res['test']['auc'] == ag_res2['test']['auc']
+            assert ag_res['test']['auc'] == ag_res3['test']['auc']
 
-        	######################################################################
+            ######################################################################
                 digits = load_digits(2)
                 X = digits['data']
                 y = digits['target']
@@ -200,10 +200,10 @@ class TestGPU(unittest.TestCase):
                           evals_result=res2)
                 assert self.non_decreasing(res2['train']['auc'])
                 #assert self.non_decreasing(res2['test']['auc'])
-        	assert res['train']['auc'] == res2['train']['auc']
-        	#assert res['test']['auc'] == res2['test']['auc']
+            assert res['train']['auc'] == res2['train']['auc']
+            #assert res['test']['auc'] == res2['test']['auc']
         
-        	######################################################################
+            ######################################################################
                 # fail-safe test for dense data
                 from sklearn.datasets import load_svmlight_file
                 X2, y2 = load_svmlight_file(dpath + 'agaricus.txt.train')
@@ -247,7 +247,7 @@ class TestGPU(unittest.TestCase):
                 if max_bin>32:
                     assert res['train']['auc'][0] >= 0.85
         
-        	######################################################################
+            ######################################################################
                 # fail-safe test for max_bin=2
                 param = {'objective': 'binary:logistic',
                          'updater': 'grow_gpu_hist',
@@ -261,7 +261,7 @@ class TestGPU(unittest.TestCase):
                 if max_bin>32:
                     assert res['train']['auc'][0] >= 0.85
         
-        	######################################################################
+            ######################################################################
                 # subsampling
                 param = {'objective': 'binary:logistic',
                          'updater': 'grow_gpu_hist',
@@ -278,7 +278,7 @@ class TestGPU(unittest.TestCase):
                 if max_bin>32:
                     assert res['train']['auc'][0] >= 0.85
                 
-	######################################################################
+    ######################################################################
         # fail-safe test for max_bin=2
         param = {'objective': 'binary:logistic',
                  'updater': 'grow_gpu_hist',
