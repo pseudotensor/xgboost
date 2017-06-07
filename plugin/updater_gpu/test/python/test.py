@@ -154,13 +154,13 @@ class TestGPU(unittest.TestCase):
             ag_res3 = {}
             
             num_rounds = 10
-                eprint("normal updater");
+            eprint("normal updater");
             xgb.train(ag_param, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
                       evals_result=ag_res)
-                eprint("grow_gpu_hist updater 1 gpu");
+            eprint("grow_gpu_hist updater 1 gpu");
             xgb.train(ag_param2, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
                       evals_result=ag_res2)
-                eprint("grow_gpu_hist updater %d gpus" % (n_gpus));
+            eprint("grow_gpu_hist updater %d gpus" % (n_gpus));
             xgb.train(ag_param3, ag_dtrain, num_rounds, [(ag_dtrain, 'train'), (ag_dtest, 'test')],
                       evals_result=ag_res3)
             #        assert 1==0
