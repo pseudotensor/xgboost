@@ -102,43 +102,33 @@ set(LINK_LIBRARIES dmlccore rabit)
 
 if(PLUGIN_UPDATER_GPU)
     # nccl
+    set(LINK_LIBRARIES ${LINK_LIBRARIES} nccl)
     add_subdirectory(nccl)
     set(NCCL_DIRECTORY ${PROJECT_SOURCE_DIR}/nccl)
-    TARGET_LINK_LIBRARIES(nccl)
     include_directories(${NCCL_DIRECTORY}/src)
-    set(LINK_LIBRARIES dmlccore rabit nccl)
 
-    # version
-    if(MSVC)
-      set(CUDA_SM 35)
-    elseif(MSVC)
-      execute_process(COMMAND bash -c ${PROJECT_SOURCE_DIR}/plugin/updater_gpu/get_cuda_sm.sh OUTPUT_VARIABLE CUDA_SM)
-    endif(MSVC)
-    
-    #MESSAGE( STATUS "CUDA_SM: " ${CUDA_SM})
-    if(${CUDA_SM} LESS 35)
-      MESSAGE( FATAL_ERROR "CUDA_SM less than 35")
-    endif(${CUDA_SM} LESS 35)
-  
 	#Find cub
 	set(CUB_DIRECTORY ${PROJECT_SOURCE_DIR}/cub/)
 	include_directories(${CUB_DIRECTORY})
+
     #Find googletest
     set(GTEST_DIRECTORY "${CACHE_PREFIX}" CACHE PATH "Googletest directory")
     include_directories(${GTEST_DIRECTORY}/include)
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-lineinfo;--expt-extended-lambda;-arch=compute_${CUDA_SM}")
-    if(NOT MSVC)
-      set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-Xcompiler -fPIC")
-    endif()
+
+    # plugin
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-lineinfo;--expt-extended-lambda")
     set(CUDA_SOURCES
       plugin/updater_gpu/src/updater_gpu.cu
       plugin/updater_gpu/src/gpu_hist_builder.cu
-    )
-    cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})
+      )
+    include(${PROJECT_SOURCE_DIR}/cmake/Utils.cmake)
+    include(${PROJECT_SOURCE_DIR}/cmake/Cuda.cmake)
+    xgboost_cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})
     set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
-    cuda_add_library(updater_gpu nccl STATIC ${CUDA_SOURCES})
+    cuda_add_library(updater_gpu STATIC ${CUDA_SOURCES})
 else()
     set(CUDA_OBJS "")
+    set(updater_gpu "")
 endif()
 
 add_library(objxgboost OBJECT ${SOURCES})
@@ -147,8 +137,8 @@ set_target_properties(${objxgboost} PROPERTIES POSITION_INDEPENDENT_CODE 1)
 add_library(libxgboost SHARED $<TARGET_OBJECTS:objxgboost> ${CUDA_OBJS})
 add_executable(xgboost $<TARGET_OBJECTS:objxgboost> ${CUDA_OBJS})
 
-target_link_libraries(xgboost ${LINK_LIBRARIES})
-target_link_libraries(libxgboost ${LINK_LIBRARIES})
+target_link_libraries(xgboost ${LINK_LIBRARIES} updater_gpu)
+target_link_libraries(libxgboost ${LINK_LIBRARIES} updater_gpu)
 
 option(JVM_BINDINGS "Build JVM bindings" OFF)
 
