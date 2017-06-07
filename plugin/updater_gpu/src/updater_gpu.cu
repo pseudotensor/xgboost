@@ -1,5 +1,5 @@
 /*!
- * Copyright 2016 Rory Mitchell
+ * Copyright 2017 XGBoost contributors
  */
 #include <xgboost/tree_updater.h>
 #include <vector>
