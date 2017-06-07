@@ -80,6 +80,8 @@ cmake -help
 ```
 Then run cmake as:
 ```bash
+$ mkdir build
+$ cd build
 $ cmake .. -G"Visual Studio 14 2015 Win64" -DPLUGIN_UPDATER_GPU=ON
 ```
 Cmake will generate an xgboost.sln solution file in the build directory. Build this solution in release mode as a x64 build.
