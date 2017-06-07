@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <numeric>
 #include <cub/cub.cuh>
 
 #ifndef NCCL
