@@ -127,8 +127,7 @@ if(PLUGIN_UPDATER_GPU)
     cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS} -arch=compute_52)
     # use below for auto-detect, but gpu_grow currently doesn't work with 61
     #xgboost_cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})
-    # use below to have static library available for developer reasons
-    #cuda_add_library(updater_gpu STATIC ${CUDA_SOURCES})
+    cuda_add_library(updater_gpu STATIC ${CUDA_SOURCES})
     set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES} updater_gpu)
 else()
     set(CUDA_OBJS "")
