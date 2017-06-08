@@ -139,7 +139,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
                                                    // (One communicator per
                                                    // process)
 
-    printf("# NCCL: Using devices\n");
+    //printf("# NCCL: Using devices\n");
     for (int d_idx = 0; d_idx < n_devices; ++d_idx) {
       streams[d_idx] = reinterpret_cast<cudaStream_t*>(malloc(sizeof(cudaStream_t)));
       dh::safe_cuda(cudaSetDevice(dList[d_idx]));
@@ -151,8 +151,8 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
       dh::safe_nccl(ncclCommCuDevice(comms[d_idx], &cudaDev));
       dh::safe_nccl(ncclCommUserRank(comms[d_idx], &rank));
       dh::safe_cuda(cudaGetDeviceProperties(&prop, cudaDev));
-      printf("#   Rank %2d uses device %2d [0x%02x] %s\n", rank, cudaDev,
-             prop.pciBusID, prop.name);
+      //printf("#   Rank %2d uses device %2d [0x%02x] %s\n", rank, cudaDev,
+      //             prop.pciBusID, prop.name);
       fflush(stdout);
     }
 
