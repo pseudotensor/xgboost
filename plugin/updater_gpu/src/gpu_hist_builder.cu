@@ -373,7 +373,15 @@ void GPUHistBuilder::BuildHist(int depth) {
   dh::synchronize_n_devices(n_devices, dList);
 
 //  time.printElapsed("Add Time");
-
+  static int firsttime=1;
+  static std::vector<size_t> debugbytes(n_devices);
+  if(firsttime){
+    firsttime=0;
+    for (int d_idx = 0; d_idx < n_devices; d_idx++) {
+      debugbytes[d_idx]=0;
+    }
+  }
+  
 #if (NCCL)
   // (in-place) reduce each element of histogram (for only current level) across
   // multiple gpus
@@ -388,6 +396,9 @@ void GPUHistBuilder::BuildHist(int depth) {
         reinterpret_cast<void*>(hist_vec[d_idx].GetLevelPtr(depth)),
         hist_vec[d_idx].LevelSize(depth) * sizeof(gpu_gpair) / sizeof(float),
         ncclFloat, ncclSum, comms[d_idx], *(streams[d_idx])));
+    size_t count=hist_vec[d_idx].LevelSize(depth) * sizeof(gpu_gpair);
+    debugbytes[d_idx]+=count;
+    fprintf(stderr,"depth: %d d_idx: %d levelsize: %d bytes: %zu debugbytes: %zu\n",depth,d_idx,hist_vec[d_idx].LevelSize(depth), count, debugbytes[d_idx]); fflush(stderr);
   }
 
   for (int d_idx = 0; d_idx < n_devices; d_idx++) {
