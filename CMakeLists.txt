@@ -3,11 +3,6 @@ project (xgboost)
 find_package(OpenMP)
 
 option(PLUGIN_UPDATER_GPU "Build GPU accelerated tree construction plugin")
-set(GPU_COMPUTE_VER 50;52;60;61 CACHE STRING
-    "Space separated list of compute versions to be built against")
-if(PLUGIN_UPDATER_GPU)
-  find_package(CUDA REQUIRED)
-endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 
@@ -82,6 +77,14 @@ set(RABIT_SOURCES
     rabit/src/c_api.cc
 )
 
+set(NCCL_SOURCES
+    nccl/src/*.cu
+)
+set(UPDATER_GPU_SOURCES
+    plugin/updater_gpu/src/*.cu
+    plugin/updater_gpu/src/exact/*.cu
+)
+
 add_subdirectory(dmlc-core)
 
 add_library(rabit STATIC ${RABIT_SOURCES})
@@ -103,42 +106,44 @@ endif()
 set(LINK_LIBRARIES dmlccore rabit)
 
 if(PLUGIN_UPDATER_GPU)
-    # nccl
-    set(LINK_LIBRARIES ${LINK_LIBRARIES} nccl)
-    add_subdirectory(nccl)
-    set(NCCL_DIRECTORY ${PROJECT_SOURCE_DIR}/nccl)
-    include_directories(${NCCL_DIRECTORY}/src)
-    set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
-    #Find cub
-    set(CUB_DIRECTORY ${PROJECT_SOURCE_DIR}/cub/)
-    include_directories(${CUB_DIRECTORY})
-    #Find googletest
-    set(GTEST_DIRECTORY "${CACHE_PREFIX}" CACHE PATH "Googletest directory")
-    include_directories(${GTEST_DIRECTORY}/include)
-    #gencode flags
-    set(GENCODE_FLAGS "")
-    foreach(ver ${GPU_COMPUTE_VER})
-      set(GENCODE_FLAGS "${GENCODE_FLAGS}-gencode arch=compute_${ver},code=sm_${ver};")
-    endforeach()
-    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;${GENCODE_FLAGS};-lineinfo;")
-    if(NOT MSVC)
-      set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-Xcompiler -fPIC")
-    endif()
-    set(CUDA_SOURCES
-      plugin/updater_gpu/src/updater_gpu.cu
-      plugin/updater_gpu/src/gpu_hist_builder.cu
-      )
-    # use below for forcing specific arch
-    cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})
-else()
-    set(CUDA_OBJS "")
+  find_package(CUDA REQUIRED)
+  
+  # nccl
+  link_directories(${CMAKE_SOURCE_DIR}/nccl/)
+  set(LINK_LIBRARIES ${LINK_LIBRARIES} nccl nccl/libnccl.a)
+  add_subdirectory(nccl)
+  set(NCCL_DIRECTORY ${PROJECT_SOURCE_DIR}/nccl)
+  include_directories(${NCCL_DIRECTORY}/src)
+  set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
+  #cuda_add_library(nccl STATIC ${NCCL_SOURCES})
+  #set_target_properties(nccl PROPERTIES LINKER_LANGUAGE CXX)
+
+  #Find cub
+  set(CUB_DIRECTORY ${PROJECT_SOURCE_DIR}/cub/)
+  include_directories(${CUB_DIRECTORY})
+
+  #Find googletest
+  set(GTEST_DIRECTORY "${CACHE_PREFIX}" CACHE PATH "Googletest directory")
+  include_directories(${GTEST_DIRECTORY}/include)
+
+  # updater_gpu
+  link_directories(${CMAKE_SOURCE_DIR}/plugin/updater_gpu/)
+  set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu plugin/updater_gpu/libupdater_gpu.a)
+  add_subdirectory(plugin/updater_gpu)
+  set(UPDATER_DIRECTORY ${PROJECT_SOURCE_DIR}/updater_gpu)
+  include_directories(${UPDATER_DIRECTORY}/src)
+  include_directories(${UPDATER_DIRECTORY}/src/exact)
+  set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
+  #cuda_add_library(updater_gpu STATIC ${UPDATER_GPU_SOURCES})
+  #set_target_properties(updater_gpu PROPERTIES LINKER_LANGUAGE CXX)
+
 endif()
 
 add_library(objxgboost OBJECT ${SOURCES})
 set_target_properties(${objxgboost} PROPERTIES POSITION_INDEPENDENT_CODE 1)
 
-add_library(libxgboost SHARED $<TARGET_OBJECTS:objxgboost> ${CUDA_OBJS})
-add_executable(xgboost $<TARGET_OBJECTS:objxgboost> ${CUDA_OBJS})
+add_library(libxgboost SHARED $<TARGET_OBJECTS:objxgboost>)
+add_executable(xgboost $<TARGET_OBJECTS:objxgboost>)
 
 target_link_libraries(xgboost ${LINK_LIBRARIES})
 target_link_libraries(libxgboost ${LINK_LIBRARIES})
@@ -152,7 +157,6 @@ if(JVM_BINDINGS)
 
     add_library(libxgboost4j SHARED
         $<TARGET_OBJECTS:objxgboost>
-        ${CUDA_OBJS}
         jvm-packages/xgboost4j/src/native/xgboost4j.cpp)
     target_link_libraries(libxgboost4j
         ${LINK_LIBRARIES}
