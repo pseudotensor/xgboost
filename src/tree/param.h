@@ -83,6 +83,8 @@ struct TrainParam : public dmlc::Parameter<TrainParam> {
   int gpu_id;
   // number of GPUs to use
   int n_gpus;
+  // whether to shard nodes for split finding 
+  int findsplit_shardongpus;
   // declare the parameters
   DMLC_DECLARE_PARAMETER(TrainParam) {
     DMLC_DECLARE_FIELD(learning_rate)
@@ -198,6 +200,10 @@ struct TrainParam : public dmlc::Parameter<TrainParam> {
         .set_lower_bound(-1)
         .set_default(-1)
         .describe("Number of GPUs to use for multi-gpu algorithms: -1=use all GPUs");
+    DMLC_DECLARE_FIELD(findsplit_shardongpus)
+        .set_lower_bound(0)
+        .set_default(0)
+        .describe("Whether to shard nodes when doing multi-gpu");
     // add alias of parameters
     DMLC_DECLARE_ALIAS(reg_lambda, lambda);
     DMLC_DECLARE_ALIAS(reg_alpha, alpha);

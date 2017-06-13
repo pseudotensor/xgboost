@@ -622,110 +622,111 @@ void GPUHistBuilder::LaunchFindSplit(int depth) {
       param.colsample_bylevel < 1.0 || param.colsample_bytree < 1.0;
 
 
-#if (NCCL&&0)
+#if(NCCL)
+  int simuljob=1; // whether to do job on single GPU and broadcast (0) or to do same job on each GPU (1) (could make user parameter, but too fine-grained maybe)
+  if(NCCL && param.findsplit_shardongpus){
   
-  // use power of 2 for split finder because nodes are power of 2 (broadcast
-  // result to remaining devices)
-  int find_split_n_devices = std::pow(2, std::floor(std::log2(n_devices)));
-  find_split_n_devices = std::min(n_nodes_level(depth), find_split_n_devices);
-  int num_nodes_device = n_nodes_level(depth) / find_split_n_devices;
-  int num_nodes_child_device = n_nodes_level(depth + 1) / find_split_n_devices;
-  const int GRID_SIZE = num_nodes_device;
+    // use power of 2 for split finder because nodes are power of 2 (broadcast
+    // result to remaining devices)
+    int find_split_n_devices = std::pow(2, std::floor(std::log2(n_devices)));
+    find_split_n_devices = std::min(n_nodes_level(depth), find_split_n_devices);
+    int num_nodes_device = n_nodes_level(depth) / find_split_n_devices;
+    int num_nodes_child_device = n_nodes_level(depth + 1) / find_split_n_devices;
+    const int GRID_SIZE = num_nodes_device;
 
-  // NOTE: No need to scatter before gather as all devices have same copy of
-  // nodes, and within find_split_kernel() nodes_temp is given values from nodes
+    // NOTE: No need to scatter before gather as all devices have same copy of
+    // nodes, and within find_split_kernel() nodes_temp is given values from nodes
 
-  // for all nodes (split among devices) find best split per node
-  for (int d_idx = 0; d_idx < find_split_n_devices; d_idx++) {
-    int device_idx = dList[d_idx];
-    dh::safe_cuda(cudaSetDevice(device_idx));
-
-    int nodes_offset_device = d_idx * num_nodes_device;
-    find_split_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>(
-        (const gpu_gpair*)(hist_vec[d_idx].GetLevelPtr(depth)),
-        feature_segments[d_idx].data(), depth, (info->num_col),
-        (hmat_.row_ptr.back()), nodes[d_idx].data(),
-        nodes_temp[d_idx].data(), nodes_child_temp[d_idx].data(),
-        nodes_offset_device, fidx_min_map[d_idx].data(),
-        gidx_fvalue_map[d_idx].data(), gpu_param,
-        left_child_smallest_temp[d_idx].data(), colsample,
-        feature_flags[d_idx].data());
-  }
-
-  // nccl only on devices that did split
-  dh::synchronize_n_devices(find_split_n_devices, dList);
-
-  for (int d_idx = 0; d_idx < find_split_n_devices; d_idx++) {
-    int device_idx = dList[d_idx];
-    dh::safe_cuda(cudaSetDevice(device_idx));
-
-    dh::safe_nccl(ncclAllGather(
-        reinterpret_cast<const void*>(nodes_temp[d_idx].data()),
-        num_nodes_device * sizeof(Node) / sizeof(char), ncclChar,
-        reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth - 1)),
-        find_split_comms[find_split_n_devices - 1][d_idx], *(streams[d_idx])));
-
-    if (depth !=
-        param.max_depth) {  // don't copy over children nodes if no more nodes
-      dh::safe_nccl(
-          ncclAllGather(reinterpret_cast<const void*>(nodes_child_temp[d_idx].data()),
-                        num_nodes_child_device * sizeof(Node) / sizeof(char),
-                        ncclChar, reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth)),
-                        find_split_comms[find_split_n_devices - 1][d_idx],
-                        *(streams[d_idx])));  // Note offset by n_nodes(depth)
-                                              // for recvbuff for child nodes
-    }
-
-    dh::safe_nccl(ncclAllGather(
-        reinterpret_cast<const void*>(left_child_smallest_temp[d_idx].data()),
-        num_nodes_device * sizeof(bool) / sizeof(char), ncclChar,
-        reinterpret_cast<void*>(left_child_smallest[d_idx].data() + n_nodes(depth - 1)),
-        find_split_comms[find_split_n_devices - 1][d_idx], *(streams[d_idx])));
-  }
-
-  for (int d_idx = 0; d_idx < find_split_n_devices; d_idx++) {
-    int device_idx = dList[d_idx];
-    dh::safe_cuda(cudaSetDevice(device_idx));
-    dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
-  }
-
-  if (n_devices > find_split_n_devices && n_devices > 1) {
-    // if n_devices==1, no need to Bcast
-    // if find_split_n_devices==1, this is just a copy operation, else it copies
-    // from master to all nodes in case extra devices not involved in split
-    for (int d_idx = 0; d_idx < n_devices; d_idx++) {
+    // for all nodes (split among devices) find best split per node
+    for (int d_idx = 0; d_idx < find_split_n_devices; d_idx++) {
       int device_idx = dList[d_idx];
       dh::safe_cuda(cudaSetDevice(device_idx));
 
-      int master_device = dList[0];
-      dh::safe_nccl(
-          ncclBcast(reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth - 1)),
-                    n_nodes_level(depth) * sizeof(Node) / sizeof(char),
-                    ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
+      int nodes_offset_device = d_idx * num_nodes_device;
+      find_split_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>(
+                                                                     (const gpu_gpair*)(hist_vec[d_idx].GetLevelPtr(depth)),
+                                                                     feature_segments[d_idx].data(), depth, (info->num_col),
+                                                                     (hmat_.row_ptr.back()), nodes[d_idx].data(),
+                                                                     nodes_temp[d_idx].data(), nodes_child_temp[d_idx].data(),
+                                                                     nodes_offset_device, fidx_min_map[d_idx].data(),
+                                                                     gidx_fvalue_map[d_idx].data(), gpu_param,
+                                                                     left_child_smallest_temp[d_idx].data(), colsample,
+                                                                     feature_flags[d_idx].data());
+    }
+
+    // nccl only on devices that did split
+    dh::synchronize_n_devices(find_split_n_devices, dList);
+
+    for (int d_idx = 0; d_idx < find_split_n_devices; d_idx++) {
+      int device_idx = dList[d_idx];
+      dh::safe_cuda(cudaSetDevice(device_idx));
+
+      dh::safe_nccl(ncclAllGather(
+                                  reinterpret_cast<const void*>(nodes_temp[d_idx].data()),
+                                  num_nodes_device * sizeof(Node) / sizeof(char), ncclChar,
+                                  reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth - 1)),
+                                  find_split_comms[find_split_n_devices - 1][d_idx], *(streams[d_idx])));
 
       if (depth !=
           param.max_depth) {  // don't copy over children nodes if no more nodes
-        dh::safe_nccl(ncclBcast(
-            reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth)),
-            n_nodes_level(depth + 1) * sizeof(Node) / sizeof(char), ncclChar,
-            master_device, comms[d_idx], *(streams[d_idx])));
+        dh::safe_nccl(
+                      ncclAllGather(reinterpret_cast<const void*>(nodes_child_temp[d_idx].data()),
+                                    num_nodes_child_device * sizeof(Node) / sizeof(char),
+                                    ncclChar, reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth)),
+                                    find_split_comms[find_split_n_devices - 1][d_idx],
+                                    *(streams[d_idx])));  // Note offset by n_nodes(depth)
+        // for recvbuff for child nodes
       }
 
-      dh::safe_nccl(ncclBcast(
-          reinterpret_cast<void*>(left_child_smallest[d_idx].data() + n_nodes(depth - 1)),
-          n_nodes_level(depth) * sizeof(bool) / sizeof(char), ncclChar,
-          master_device, comms[d_idx], *(streams[d_idx])));
+      dh::safe_nccl(ncclAllGather(
+                                  reinterpret_cast<const void*>(left_child_smallest_temp[d_idx].data()),
+                                  num_nodes_device * sizeof(bool) / sizeof(char), ncclChar,
+                                  reinterpret_cast<void*>(left_child_smallest[d_idx].data() + n_nodes(depth - 1)),
+                                  find_split_comms[find_split_n_devices - 1][d_idx], *(streams[d_idx])));
     }
 
-    for (int d_idx = 0; d_idx < n_devices; d_idx++) {
+    for (int d_idx = 0; d_idx < find_split_n_devices; d_idx++) {
       int device_idx = dList[d_idx];
       dh::safe_cuda(cudaSetDevice(device_idx));
       dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
     }
-  }
 
-#elif(0)
-  {
+    if (n_devices > find_split_n_devices && n_devices > 1) {
+      // if n_devices==1, no need to Bcast
+      // if find_split_n_devices==1, this is just a copy operation, else it copies
+      // from master to all nodes in case extra devices not involved in split
+      for (int d_idx = 0; d_idx < n_devices; d_idx++) {
+        int device_idx = dList[d_idx];
+        dh::safe_cuda(cudaSetDevice(device_idx));
+
+        int master_device = dList[0];
+        dh::safe_nccl(
+                      ncclBcast(reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth - 1)),
+                                n_nodes_level(depth) * sizeof(Node) / sizeof(char),
+                                ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
+
+        if (depth !=
+            param.max_depth) {  // don't copy over children nodes if no more nodes
+          dh::safe_nccl(ncclBcast(
+                                  reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth)),
+                                  n_nodes_level(depth + 1) * sizeof(Node) / sizeof(char), ncclChar,
+                                  master_device, comms[d_idx], *(streams[d_idx])));
+        }
+
+        dh::safe_nccl(ncclBcast(
+                                reinterpret_cast<void*>(left_child_smallest[d_idx].data() + n_nodes(depth - 1)),
+                                n_nodes_level(depth) * sizeof(bool) / sizeof(char), ncclChar,
+                                master_device, comms[d_idx], *(streams[d_idx])));
+      }
+
+      for (int d_idx = 0; d_idx < n_devices; d_idx++) {
+        int device_idx = dList[d_idx];
+        dh::safe_cuda(cudaSetDevice(device_idx));
+        dh::safe_cuda(cudaStreamSynchronize(*(streams[d_idx])));
+      }
+    }
+  }
+  else if(simuljob==0 && NCCL==1){
     int num_nodes_device = n_nodes_level(depth);
     const int GRID_SIZE = num_nodes_device;
     
@@ -736,13 +737,13 @@ void GPUHistBuilder::LaunchFindSplit(int depth) {
 
     int nodes_offset_device = d_idx * num_nodes_device;
     find_split_kernel<BLOCK_THREADS><<<GRID_SIZE, BLOCK_THREADS>>>(
-        (const gpu_gpair*)(hist_vec[d_idx].GetLevelPtr(depth)),
-        feature_segments[d_idx].data(), depth, (info->num_col),
-        (hmat_.row_ptr.back()), nodes[d_idx].data(), NULL, NULL,
-        nodes_offset_device, fidx_min_map[d_idx].data(),
-        gidx_fvalue_map[d_idx].data(), gpu_param,
-        left_child_smallest[d_idx].data(), colsample,
-        feature_flags[d_idx].data());
+                                                                   (const gpu_gpair*)(hist_vec[d_idx].GetLevelPtr(depth)),
+                                                                   feature_segments[d_idx].data(), depth, (info->num_col),
+                                                                   (hmat_.row_ptr.back()), nodes[d_idx].data(), NULL, NULL,
+                                                                   nodes_offset_device, fidx_min_map[d_idx].data(),
+                                                                   gidx_fvalue_map[d_idx].data(), gpu_param,
+                                                                   left_child_smallest[d_idx].data(), colsample,
+                                                                   feature_flags[d_idx].data());
 
     // broadcast result
     for (int d_idx = 0; d_idx < n_devices; d_idx++) {
@@ -750,21 +751,21 @@ void GPUHistBuilder::LaunchFindSplit(int depth) {
       dh::safe_cuda(cudaSetDevice(device_idx));
 
       dh::safe_nccl(
-          ncclBcast(reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth - 1)),
-                    n_nodes_level(depth) * sizeof(Node) / sizeof(char),
-                    ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
+                    ncclBcast(reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth - 1)),
+                              n_nodes_level(depth) * sizeof(Node) / sizeof(char),
+                              ncclChar, master_device, comms[d_idx], *(streams[d_idx])));
 
       if (depth != param.max_depth) {  // don't copy over children nodes if no more nodes
         dh::safe_nccl(ncclBcast(
                                 reinterpret_cast<void*>(nodes[d_idx].data() + n_nodes(depth)),
                                 n_nodes_level(depth + 1) * sizeof(Node) / sizeof(char), ncclChar,
-            master_device, comms[d_idx], *(streams[d_idx])));
+                                master_device, comms[d_idx], *(streams[d_idx])));
       }
 
       dh::safe_nccl(ncclBcast(
-          reinterpret_cast<void*>(left_child_smallest[d_idx].data() + n_nodes(depth - 1)),
-          n_nodes_level(depth) * sizeof(bool) / sizeof(char), ncclChar,
-          master_device, comms[d_idx], *(streams[d_idx])));
+                              reinterpret_cast<void*>(left_child_smallest[d_idx].data() + n_nodes(depth - 1)),
+                              n_nodes_level(depth) * sizeof(bool) / sizeof(char), ncclChar,
+                              master_device, comms[d_idx], *(streams[d_idx])));
     }
 
     for (int d_idx = 0; d_idx < n_devices; d_idx++) {
@@ -774,8 +775,9 @@ void GPUHistBuilder::LaunchFindSplit(int depth) {
     }
 
   }
-#else
-  {
+  else
+#endif
+    { // if no NCCL or simuljob==1, do this
     int num_nodes_device = n_nodes_level(depth);
     const int GRID_SIZE = num_nodes_device;
 
@@ -796,7 +798,7 @@ void GPUHistBuilder::LaunchFindSplit(int depth) {
       
     }
   }
-#endif
+
 
   // NOTE: No need to syncrhonize with host as all above pure P2P ops or
   // on-device ops

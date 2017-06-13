@@ -1,12 +1,16 @@
 [submodule "dmlc-core"]
 	path = dmlc-core
 	url = https://github.com/dmlc/dmlc-core
+	shallow = true
 [submodule "rabit"]
 	path = rabit
 	url = https://github.com/dmlc/rabit
+	shallow = true
 [submodule "nccl"]
 	path = nccl
 	url = https://github.com/dmlc/nccl
+	shallow = true
 [submodule "cub"]
 	path = cub
 	url = https://github.com/NVlabs/cub
+	shallow = true
