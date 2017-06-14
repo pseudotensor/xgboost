@@ -110,7 +110,8 @@ if(PLUGIN_UPDATER_GPU)
   
   # nccl
   #link_directories(${CMAKE_SOURCE_DIR}/build/nccl/)
-  #set(LINK_LIBRARIES ${LINK_LIBRARIES} nccl libnccl.a)
+  set(LINK_LIBRARIES ${LINK_LIBRARIES} nccl)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} nccl)
   add_subdirectory(nccl)
   #set(NCCL_DIRECTORY ${PROJECT_SOURCE_DIR}/nccl)
   #include_directories(${NCCL_DIRECTORY}/src)
@@ -130,7 +131,8 @@ if(PLUGIN_UPDATER_GPU)
 
   # updater_gpu
   #link_directories(${CMAKE_SOURCE_DIR}/build/plugin/updater_gpu/)
-  #set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu libupdater_gpu.a)
+  set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu)
   add_subdirectory(plugin/updater_gpu)
   #set(UPDATER_DIRECTORY ${PROJECT_SOURCE_DIR}/updater_gpu)
   #include_directories(${UPDATER_DIRECTORY}/src)
@@ -147,12 +149,16 @@ endif()
 add_library(objxgboost OBJECT ${SOURCES})
 set_target_properties(${objxgboost} PROPERTIES POSITION_INDEPENDENT_CODE 1)
 
-add_library(lib${PROJECT_NAME} SHARED $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl> $<TARGET_OBJECTS:updater_gpu>)
-add_executable(${PROJECT_NAME}  $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl>  $<TARGET_OBJECTS:updater_gpu>)
+#add_library(lib${PROJECT_NAME} SHARED $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl> $<TARGET_OBJECTS:updater_gpu>)
+#add_executable(${PROJECT_NAME}  $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl>  $<TARGET_OBJECTS:updater_gpu>)
+add_library(lib${PROJECT_NAME} SHARED $<TARGET_OBJECTS:objxgboost>)
+add_executable(${PROJECT_NAME}  $<TARGET_OBJECTS:objxgboost>)
 set(LINK_FLAGS ${LINK_FLAGS} "-Wl,-whole-archive")
 
-target_link_libraries(libxgboost ${LINK_LIBRARIES})
-target_link_libraries(xgboost ${LINK_LIBRARIES})
+#target_link_libraries(libxgboost "-Wl,--whole-archive" ${LINK_LIBRARIES}  )
+#target_link_libraries(xgboost "-Wl,--whole-archive"  ${LINK_LIBRARIES})
+target_link_libraries(libxgboost  ${LINK_LIBRARIES}  )
+target_link_libraries(xgboost   ${LINK_LIBRARIES})
 
 option(JVM_BINDINGS "Build JVM bindings" OFF)
 

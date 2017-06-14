@@ -94,7 +94,7 @@ if(JON)
   foreach(ver ${GPU_COMPUTE_VER})
     set(GENCODE_FLAGS "${GENCODE_FLAGS}-gencode arch=compute_${ver},code=sm_${ver};")
   endforeach()
-  set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;${GENCODE_FLAGS};-lineinfo;")
+  set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;${GENCODE_FLAGS};-lineinfo")
   if(NOT MSVC)
     set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-Xcompiler -fPIC")
   endif()
@@ -103,9 +103,16 @@ if(JON)
   #cuda_compile(CUDA_OBJS ${SOURCES} ${CUDA_NVCC_FLAGS})
   cuda_compile(CUDA_OBJS ${SOURCES} ${CUDA_NVCC_FLAGS})
   set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
+
+
+  set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
+
+  set(BUILD_SHARED_LIBS OFF)
+
+  set(CUDA_SEPARABLE_COMPILATION ON)
   
-  #  cuda_add_library(${PROJECT_NAME} OBJECT ${CUDA_OBJS})
-  add_library(${PROJECT_NAME} OBJECT ${SOURCES})
+  #cuda_add_library(${PROJECT_NAME} ${CUDA_OBJS})
+  cuda_add_library(${PROJECT_NAME} STATIC ${SOURCES})
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
   
 else()
