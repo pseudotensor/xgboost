@@ -109,14 +109,16 @@ if(PLUGIN_UPDATER_GPU)
   find_package(CUDA REQUIRED)
   
   # nccl
-  link_directories(${CMAKE_SOURCE_DIR}/nccl/)
-  set(LINK_LIBRARIES ${LINK_LIBRARIES} nccl nccl/libnccl.a)
+  #link_directories(${CMAKE_SOURCE_DIR}/build/nccl/)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} nccl libnccl.a)
   add_subdirectory(nccl)
-  set(NCCL_DIRECTORY ${PROJECT_SOURCE_DIR}/nccl)
-  include_directories(${NCCL_DIRECTORY}/src)
-  set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
+  #set(NCCL_DIRECTORY ${PROJECT_SOURCE_DIR}/nccl)
+  #include_directories(${NCCL_DIRECTORY}/src)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
   #cuda_add_library(nccl STATIC ${NCCL_SOURCES})
   #set_target_properties(nccl PROPERTIES LINKER_LANGUAGE CXX)
+  #find_library(NCCL_LIB nccl HINTS ${CMAKE_SOURCE_DIR}/build/plugin/nccl/)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} NCCL_LIB)
 
   #Find cub
   set(CUB_DIRECTORY ${PROJECT_SOURCE_DIR}/cub/)
@@ -127,26 +129,30 @@ if(PLUGIN_UPDATER_GPU)
   include_directories(${GTEST_DIRECTORY}/include)
 
   # updater_gpu
-  link_directories(${CMAKE_SOURCE_DIR}/plugin/updater_gpu/)
-  set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu plugin/updater_gpu/libupdater_gpu.a)
+  #link_directories(${CMAKE_SOURCE_DIR}/build/plugin/updater_gpu/)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu libupdater_gpu.a)
   add_subdirectory(plugin/updater_gpu)
-  set(UPDATER_DIRECTORY ${PROJECT_SOURCE_DIR}/updater_gpu)
-  include_directories(${UPDATER_DIRECTORY}/src)
-  include_directories(${UPDATER_DIRECTORY}/src/exact)
-  set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
+  #set(UPDATER_DIRECTORY ${PROJECT_SOURCE_DIR}/updater_gpu)
+  #include_directories(${UPDATER_DIRECTORY}/src)
+  #include_directories(${UPDATER_DIRECTORY}/src/exact)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
   #cuda_add_library(updater_gpu STATIC ${UPDATER_GPU_SOURCES})
   #set_target_properties(updater_gpu PROPERTIES LINKER_LANGUAGE CXX)
+  #find_library(UPDATER_GPU_LIB updater_gpu HINTS ${CMAKE_SOURCE_DIR}/build/plugin/updater_gpu/)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} UPDATER_GPU_LIB)
 
 endif()
 
+#set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--export-all-symbols")
 add_library(objxgboost OBJECT ${SOURCES})
 set_target_properties(${objxgboost} PROPERTIES POSITION_INDEPENDENT_CODE 1)
 
-add_library(libxgboost SHARED $<TARGET_OBJECTS:objxgboost>)
-add_executable(xgboost $<TARGET_OBJECTS:objxgboost>)
+add_library(lib${PROJECT_NAME} SHARED $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl> $<TARGET_OBJECTS:updater_gpu>)
+add_executable(${PROJECT_NAME}  $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl>  $<TARGET_OBJECTS:updater_gpu>)
+set(LINK_FLAGS ${LINK_FLAGS} "-Wl,-whole-archive")
 
-target_link_libraries(xgboost ${LINK_LIBRARIES})
 target_link_libraries(libxgboost ${LINK_LIBRARIES})
+target_link_libraries(xgboost ${LINK_LIBRARIES})
 
 option(JVM_BINDINGS "Build JVM bindings" OFF)
 

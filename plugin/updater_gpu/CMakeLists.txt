@@ -85,6 +85,7 @@ set(JON 1)
 
 if(JON)
   #gencode flags
+  include_directories(${CMAKE_SOURCE_DIR}/nccl/src)
 
   set(GPU_COMPUTE_VER 50;52;60;61 CACHE STRING
     "Space separated list of compute versions to be built against")
@@ -103,7 +104,8 @@ if(JON)
   cuda_compile(CUDA_OBJS ${SOURCES} ${CUDA_NVCC_FLAGS})
   set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
   
-  cuda_add_library(${PROJECT_NAME} STATIC ${CUDA_OBJS})
+  #  cuda_add_library(${PROJECT_NAME} OBJECT ${CUDA_OBJS})
+  add_library(${PROJECT_NAME} OBJECT ${SOURCES})
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
   
 else()
@@ -125,6 +127,6 @@ else()
   cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})  
   set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
   
-  cuda_add_library(${PROJECT_NAME} STATIC ${CUDA_OBJS})
+  cuda_add_library(${PROJECT_NAME} OBJECT ${CUDA_OBJS})
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 endif()

@@ -154,7 +154,8 @@ endfunction()
 # Usage:
 #   xgboost_cuda_compile(<objlist_variable> <cuda_files>)
 macro(xgboost_cuda_compile objlist_variable)
-  foreach(var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
+  #  foreach(var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
+    foreach(var CMAKE_CXX_FLAGS)
     set(${var}_backup_in_cuda_compile_ "${${var}}")
 
     # we remove /EHa as it generates warnings under windows
@@ -169,7 +170,7 @@ macro(xgboost_cuda_compile objlist_variable)
     list(APPEND CUDA_NVCC_FLAGS -Xcompiler -Wno-unused-function)
   endif()
 
-  set(CUDA_NVCC_FLAGS_DEBUG "${CUDA_NVCC_FLAGS_DEBUG} -G -lineinfo")
+#  set(CUDA_NVCC_FLAGS_DEBUG "${CUDA_NVCC_FLAGS_DEBUG} -G -lineinfo")
 
   if(MSVC)
     # disable noisy warnings:
@@ -194,7 +195,8 @@ macro(xgboost_cuda_compile objlist_variable)
 
   cuda_compile(cuda_objcs ${ARGN})
 
-  foreach(var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
+  #  foreach(var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_DEBUG)
+    foreach(var CMAKE_CXX_FLAGS)
     set(${var} "${${var}_backup_in_cuda_compile_}")
     unset(${var}_backup_in_cuda_compile_)
   endforeach()
