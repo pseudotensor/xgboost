@@ -131,9 +131,9 @@ if(PLUGIN_UPDATER_GPU)
 
   # updater_gpu
   #link_directories(${CMAKE_SOURCE_DIR}/build/plugin/updater_gpu/)
-  set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu)
   #set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu)
-  add_subdirectory(plugin/updater_gpu)
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} updater_gpu)
+  #add_subdirectory(plugin/updater_gpu)
   #set(UPDATER_DIRECTORY ${PROJECT_SOURCE_DIR}/updater_gpu)
   #include_directories(${UPDATER_DIRECTORY}/src)
   #include_directories(${UPDATER_DIRECTORY}/src/exact)
@@ -143,22 +143,44 @@ if(PLUGIN_UPDATER_GPU)
   #find_library(UPDATER_GPU_LIB updater_gpu HINTS ${CMAKE_SOURCE_DIR}/build/plugin/updater_gpu/)
   #set(LINK_LIBRARIES ${LINK_LIBRARIES} UPDATER_GPU_LIB)
 
+  #gencode flags
+  set(GPU_COMPUTE_VER 50;52;60;61 CACHE STRING
+    "Space separated list of compute versions to be built against")
+  
+  set(GENCODE_FLAGS "")
+  foreach(ver ${GPU_COMPUTE_VER})
+    set(GENCODE_FLAGS "${GENCODE_FLAGS}-gencode arch=compute_${ver},code=sm_${ver};")
+  endforeach()
+  set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};--expt-extended-lambda;${GENCODE_FLAGS};-lineinfo;")
+  if(NOT MSVC)
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-Xcompiler -fPIC")
+  endif()
+  set(CUDA_SOURCES
+    plugin/updater_gpu/src/updater_gpu.cu
+    plugin/updater_gpu/src/gpu_hist_builder.cu
+    )
+  # use below for forcing specific arch
+  cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})
+  
+
+else()
+  set(CUDA_OBJS "")
 endif()
 
 #set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--export-all-symbols")
 add_library(objxgboost OBJECT ${SOURCES})
 set_target_properties(${objxgboost} PROPERTIES POSITION_INDEPENDENT_CODE 1)
 
-#add_library(lib${PROJECT_NAME} SHARED $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl> $<TARGET_OBJECTS:updater_gpu>)
-#add_executable(${PROJECT_NAME}  $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl>  $<TARGET_OBJECTS:updater_gpu>)
-add_library(lib${PROJECT_NAME} SHARED $<TARGET_OBJECTS:objxgboost>)
-add_executable(${PROJECT_NAME}  $<TARGET_OBJECTS:objxgboost>)
-set(LINK_FLAGS ${LINK_FLAGS} "-Wl,-whole-archive")
+#3add_library(lib${PROJECT_NAME} SHARED $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl> $<TARGET_OBJECTS:updater_gpu> $<TARGET_OBJECTS:dmlc>)
+#add_executable(${PROJECT_NAME}  $<TARGET_OBJECTS:objxgboost> $<TARGET_OBJECTS:nccl>  $<TARGET_OBJECTS:updater_gpu> $<TARGET_OBJECTS:dmlc>)
+add_library(lib${PROJECT_NAME} SHARED $<TARGET_OBJECTS:objxgboost> ${CUDA_OBJS})
+add_executable(${PROJECT_NAME}  $<TARGET_OBJECTS:objxgboost> ${CUDA_OBJS})
+#set(LINK_FLAGS ${LINK_FLAGS} "-Wl,-whole-archive")
 
 #target_link_libraries(libxgboost "-Wl,--whole-archive" ${LINK_LIBRARIES}  )
 #target_link_libraries(xgboost "-Wl,--whole-archive"  ${LINK_LIBRARIES})
-target_link_libraries(libxgboost  ${LINK_LIBRARIES}  )
 target_link_libraries(xgboost   ${LINK_LIBRARIES})
+target_link_libraries(libxgboost  ${LINK_LIBRARIES}  )
 
 option(JVM_BINDINGS "Build JVM bindings" OFF)
 
@@ -168,7 +190,8 @@ if(JVM_BINDINGS)
     include_directories(${JNI_INCLUDE_DIRS} jvm-packages/xgboost4j/src/native)
 
     add_library(libxgboost4j SHARED
-        $<TARGET_OBJECTS:objxgboost>
+      $<TARGET_OBJECTS:objxgboost>
+      ${CUDA_OBJS}
         jvm-packages/xgboost4j/src/native/xgboost4j.cpp)
     target_link_libraries(libxgboost4j
         ${LINK_LIBRARIES}

@@ -102,17 +102,17 @@ if(JON)
   # use below for forcing specific arch
   #cuda_compile(CUDA_OBJS ${SOURCES} ${CUDA_NVCC_FLAGS})
   cuda_compile(CUDA_OBJS ${SOURCES} ${CUDA_NVCC_FLAGS})
-  set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
+  #set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
 
-
-  set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
-
-  set(BUILD_SHARED_LIBS OFF)
-
-  set(CUDA_SEPARABLE_COMPILATION ON)
+## one of 3 below cause cub issue
+#  set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
+#  set(BUILD_SHARED_LIBS OFF)
+#  set(CUDA_SEPARABLE_COMPILATION ON)
   
   #cuda_add_library(${PROJECT_NAME} ${CUDA_OBJS})
+  #cuda_add_library(${PROJECT_NAME} STATIC ${SOURCES})
   cuda_add_library(${PROJECT_NAME} STATIC ${SOURCES})
+  set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE 1)
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
   
 else()
@@ -134,6 +134,6 @@ else()
   cuda_compile(CUDA_OBJS ${CUDA_SOURCES} ${CUDA_NVCC_FLAGS})  
   set(LINK_LIBRARIES ${LINK_LIBRARIES} ${CUDA_LIBRARIES})
   
-  cuda_add_library(${PROJECT_NAME} OBJECT ${CUDA_OBJS})
+  add_library(${PROJECT_NAME} OBJECT ${CUDA_OBJS})
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 endif()
