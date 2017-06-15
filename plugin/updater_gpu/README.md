@@ -63,6 +63,22 @@ submodule: The plugin also depends on CUB 1.6.4 - https://nvlabs.github.io/cub/ 
 
 submodule: NVIDIA NCCL from https://github.com/NVIDIA/nccl with windows port allowed by git@github.com:h2oai/nccl.git
 
+## Download full repo + full submodules for your choice (or empty) path <mypath>
+
+git clone --recursive https://github.com/pseudotensor/xgboost.git <mypath>
+
+## Download with shallow submodules for much quicker download:
+
+git 2.9.0+
+
+git clone --recursive --shallow-submodules https://github.com/pseudotensor/xgboost.git <mypath>
+
+git 2.9.0-:
+
+git clone https://github.com/pseudotensor/xgboost.git <mypath>
+cd <mypath>
+bash gitshallow_submodules.sh
+
 ## Build
 
 From the command line on Linux starting from the xgboost directory:
