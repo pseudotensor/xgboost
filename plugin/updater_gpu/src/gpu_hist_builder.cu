@@ -125,7 +125,8 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     // set dList member
     dList.resize(n_devices);
     for (int d_idx = 0; d_idx < n_devices; ++d_idx) {
-      int device_idx = (param.gpu_id + d_idx) % n_devices;
+      int device_idx = param.gpu_id % dh::n_visible_devices() + d_idx % n_devices;
+      fprintf(stderr,"d_idx=%d device_idx=%d param.gpu_id=%d n_devices=%d\n",d_idx,device_idx,param.gpu_id,n_devices); fflush(stderr);
       dList[d_idx] = device_idx;
     }
 
@@ -836,19 +837,19 @@ void GPUHistBuilder::InitFirstNode(const std::vector<bst_gpair>& gpair) {
 
   std::vector<std::future<gpu_gpair>> future_results(n_devices);
   for (int d_idx = 0; d_idx < n_devices; d_idx++) {
-    int device_idx = dList[d_idx];
 
-    auto begin = device_gpair[d_idx].tbegin();
-    auto end = device_gpair[d_idx].tend();
-    gpu_gpair init = gpu_gpair();
-    auto binary_op = thrust::plus<gpu_gpair>();
 
     // std::async captures the algorithm parameters by value
     // use std::launch::async to ensure the creation of a new thread
     future_results[d_idx] = std::async(std::launch::async, [=] {
-      dh::safe_cuda(cudaSetDevice(device_idx));
-      return thrust::reduce(begin, end, init, binary_op);
-    });
+        int device_idx = dList[d_idx];
+        dh::safe_cuda(cudaSetDevice(device_idx));
+        auto begin = device_gpair[d_idx].tbegin();
+        auto end = device_gpair[d_idx].tend();
+        gpu_gpair init = gpu_gpair();
+        auto binary_op = thrust::plus<gpu_gpair>();
+        return thrust::reduce(begin, end, init, binary_op);
+      });
   }
 
   // sum over devices on host (with blocking get())
@@ -1107,6 +1108,7 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
 
   // done with multi-GPU, pass back result from master to tree on host
   int master_device = dList[0];
+  dh::safe_cuda(cudaSetDevice(master_device));
   dense2sparse_tree(p_tree, nodes[master_device].tbegin(),
                     nodes[master_device].tend(), param);
 }

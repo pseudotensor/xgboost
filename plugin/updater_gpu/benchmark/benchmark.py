@@ -17,6 +17,8 @@ def run_benchmark(args, gpu_algorithm, cpu_algorithm):
              'tree_method': 'exact',
              'max_depth': 6,
              'silent': 1,
+             'n_gpus': 1,
+             'gpu_id': 3,
              'eval_metric': 'auc'}
 
     param['updater'] = gpu_algorithm
@@ -25,11 +27,11 @@ def run_benchmark(args, gpu_algorithm, cpu_algorithm):
     xgb.train(param, dtrain, args.iterations)
     print ("Time: %s seconds" % (str(time.time() - tmp)))
 
-    param['updater'] = cpu_algorithm
-    print("Training with '%s'" % param['updater'])
-    tmp = time.time()
-    xgb.train(param, dtrain, args.iterations)
-    print ("Time: %s seconds" % (str(time.time() - tmp)))
+    #param['updater'] = cpu_algorithm
+    #print("Training with '%s'" % param['updater'])
+    #tmp = time.time()
+    #xgb.train(param, dtrain, args.iterations)
+    #print ("Time: %s seconds" % (str(time.time() - tmp)))
 
 
 
@@ -42,9 +44,9 @@ args = parser.parse_args()
 
 if 'grow_gpu_hist' in args.algorithm:
     run_benchmark(args, args.algorithm, 'grow_fast_histmaker')
-if 'grow_gpu' in args.algorithm:
+elif 'grow_gpu' in args.algorithm:
     run_benchmark(args, args.algorithm, 'grow_colmaker')
-if 'all' in args.algorithm:
+elif 'all' in args.algorithm:
     run_benchmark(args, 'grow_gpu', 'grow_colmaker')
     run_benchmark(args, 'grow_gpu_hist', 'grow_fast_histmaker')
 
