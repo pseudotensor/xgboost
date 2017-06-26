@@ -69,15 +69,15 @@ git clone --recursive https://github.com/pseudotensor/xgboost.git <mypath>
 
 ## Download with shallow submodules for much quicker download:
 
-git 2.9.0+
+git 2.9.0+ (assumes only HEAD used for all submodules, but not true currently for dmlc-core and rabbit)
 
 git clone --recursive --shallow-submodules https://github.com/pseudotensor/xgboost.git <mypath>
 
-git 2.9.0-:
+git 2.9.0-: (only cub is shallow, as largest repo)
 
 git clone https://github.com/pseudotensor/xgboost.git <mypath>
 cd <mypath>
-bash gitshallow_submodules.sh
+bash plugin/updater/gpu/gitshallow_submodules.sh
 
 ## Build
 
@@ -87,7 +87,8 @@ On Linux, from the xgboost directory:
 ```bash
 $ mkdir build
 $ cd build
-$ cmake .. -DPLUGIN_UPDATER_GPU=ON
+# Setting Release needed or else (e.g.) nccl compiled with -G in nvcc and so will be slower
+$ cmake .. -DPLUGIN_UPDATER_GPU=ON -DCMAKE_BUILD_TYPE=Release
 $ make -j
 ```
 On Windows using cmake, see what options for Generators you have for cmake, and choose one with [arch] replaced by Win64:
@@ -98,7 +99,7 @@ Then run cmake as:
 ```bash
 $ mkdir build
 $ cd build
-$ cmake .. -G"Visual Studio 14 2015 Win64" -DPLUGIN_UPDATER_GPU=ON
+$ cmake .. -G"Visual Studio 14 2015 Win64" -DPLUGIN_UPDATER_GPU=ON -DCMAKE_BUILD_TYPE=Release
 ```
 Cmake will generate an xgboost.sln solution file in the build directory. Build this solution in release mode as a x64 build.
 
