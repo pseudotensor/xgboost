@@ -327,9 +327,10 @@ class dvec {
     _ptr = static_cast<T *>(ptr);
     _size = size;
     _device_idx = device_idx;
+    safe_cuda(cudaSetDevice(_device_idx));
   }
 
-  dvec() : _ptr(NULL), _size(0), _device_idx(0) {}
+  dvec() : _ptr(NULL), _size(0), _device_idx(-1) {}
   size_t size() const { return _size; }
   int device_idx() const { return _device_idx; }
   bool empty() const { return _ptr == NULL || _size == 0; }
@@ -378,6 +379,8 @@ class dvec {
     if (other.device_idx() == this->device_idx()) {
       thrust::copy(other.tbegin(), other.tend(), this->tbegin());
     } else {
+      std::cout << "deviceother: " << other.device_idx() << " devicethis: " << this->device_idx() << std::endl;
+      std::cout << "size deviceother: " << other.size() << " devicethis: " << this->device_idx() << std::endl;
       throw std::runtime_error("Cannot copy to/from different devices");
     }
 
@@ -413,14 +416,14 @@ class dvec2 {
     if (!empty()) {
       throw std::runtime_error("Tried to allocate dvec2 but already allocated");
     }
+    _device_idx = device_idx;
     _d1.external_allocate(_device_idx, ptr1, size);
     _d2.external_allocate(_device_idx, ptr2, size);
     _buff.d_buffers[0] = static_cast<T *>(ptr1);
     _buff.d_buffers[1] = static_cast<T *>(ptr2);
     _buff.selector = 0;
-    _device_idx = device_idx;
   }
-  dvec2() : _d1(), _d2(), _buff(), _device_idx(0) {}
+  dvec2() : _d1(), _d2(), _buff(), _device_idx(-1) {}
 
   size_t size() const { return _d1.size(); }
   int device_idx() const { return _device_idx; }

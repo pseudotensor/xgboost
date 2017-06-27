@@ -105,12 +105,18 @@ Cmake will generate an xgboost.sln solution file in the build directory. Build t
 
 Visual studio community 2015, supported by cuda toolkit (http://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/#axzz4isREr2nS), can be downloaded from: https://my.visualstudio.com/Downloads?q=Visual%20Studio%20Community%202015 .  You may also be able to use a later version of visual studio depending on whether the CUDA toolkit supports it.  Note that Mingw cannot be used with cuda.
 
+### For other nccl libraries
+
+On some systems, nccl libraries are specific to a particular system (IBM Power or nvidia-docker) and can enable use of nvlink (between GPUs or even between GPUs and system memory).  In that case, one wants to avoid the static nccl library by changing "STATIC" to "SHARED" in nccl/CMakeLists.txt and deleting the shared nccl library created (so that the system one is used).
+
 ### For Developers!
+
+
 
 In case you want to build only for a specific GPU(s), for eg. GP100 and GP102,
 whose compute capability are 60 and 61 respectively:
 ```bash
-$ cmake .. -DPLUGIN_UPDATER_GPU=ON -DGPU_COMPUTE_VER="60;61"
+$ cmake .. -DPLUGIN_UPDATER_GPU=ON -DCMAKE_BUILD_TYPE=Release -DGPU_COMPUTE_VER="60;61"
 ```
 By default, the versions will include support for all GPUs in Maxwell and Pascal architectures.
 

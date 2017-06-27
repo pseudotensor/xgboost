@@ -32,6 +32,11 @@ namespace xgboost {
 namespace tree {
 namespace exact {
 
+  int get_device_idx(const TrainParam param){
+    // protect against overrun for gpu_id
+    return (param.gpu_id  + 0 ) % dh::n_visible_devices();
+  }
+
 template <typename node_id_t>
 __global__ void initRootNode(Node<node_id_t>* nodes, const gpu_gpair* sums,
                              const TrainParam param) {
@@ -226,7 +231,7 @@ private:
 
   void allocateAllData(int offsetSize) {
     int tmpBuffSize = scanTempBufferSize(nVals);
-    ba.allocate(param.gpu_id,
+    ba.allocate(get_device_idx(param),
                 &vals, nVals,
                 &vals_cached, nVals,
                 &instIds, nVals,
@@ -246,7 +251,7 @@ private:
   }
 
   void setupOneTimeData(DMatrix& hMat) {
-    size_t free_memory = dh::available_memory(param.gpu_id);
+    size_t free_memory = dh::available_memory(get_device_idx(param));
     if (!hMat.SingleColBlock()) {
       throw std::runtime_error("exact::GPUBuilder - must have 1 column block");
     }
@@ -259,7 +264,7 @@ private:
     if (!param.silent) {
       const int mb_size = 1048576;
       LOG(CONSOLE) << "Allocated " << ba.size() / mb_size << "/"
-                   << free_memory / mb_size << " MB on " << dh::device_name(param.gpu_id);
+                   << free_memory / mb_size << " MB on " << dh::device_name(get_device_idx(param));
     }
   }
 
@@ -341,7 +346,7 @@ private:
                                       colOffsets.data(), vals.current(),
                                       nVals, nCols);
       // gather the node assignments across all other columns too
-      gather<node_id_t>(param.gpu_id, nodeAssigns.current(), nodeAssignsPerInst.data(),
+      gather<node_id_t>(get_device_idx(param), nodeAssigns.current(), nodeAssignsPerInst.data(),
                         instIds.current(), nVals);
       sortKeys(level);
     }
@@ -352,7 +357,7 @@ private:
     // but we don't need more than level+1 bits for sorting!
     segmentedSort(tmp_mem, nodeAssigns, nodeLocations, nVals, nCols, colOffsets,
                   0, level+1);
-    gather<float,int>(param.gpu_id, vals.other(), vals.current(), instIds.other(),
+    gather<float,int>(get_device_idx(param), vals.other(), vals.current(), instIds.other(),
                       instIds.current(), nodeLocations.current(), nVals);
     vals.buff().selector ^= 1;
     instIds.buff().selector ^= 1;

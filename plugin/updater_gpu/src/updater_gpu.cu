@@ -31,14 +31,14 @@ class GPUMaker : public TreeUpdater {
     param.learning_rate = lr / trees.size();
     builder.UpdateParam(param);
 
-    try {
+    //    try {
       // build tree
       for (size_t i = 0; i < trees.size(); ++i) {
         builder.Update(gpair, dmat, trees[i]);
       }
-    } catch (const std::exception& e) {
-      LOG(FATAL) << "GPU plugin exception: " << e.what() << std::endl;
-    }
+      //    } catch (const std::exception& e) {
+      //      LOG(FATAL) << "GPU plugin exception: " << e.what() << std::endl;
+      //    }
     param.learning_rate = lr;
   }
 
@@ -65,13 +65,13 @@ class GPUHistMaker : public TreeUpdater {
     param.learning_rate = lr / trees.size();
     builder.UpdateParam(param);
     // build tree
-    try {
+    //    try {
       for (size_t i = 0; i < trees.size(); ++i) {
         builder.Update(gpair, dmat, trees[i]);
       }
-    } catch (const std::exception& e) {
-      LOG(FATAL) << "GPU plugin exception: " << e.what() << std::endl;
-    }
+      //    } catch (const std::exception& e) {
+      //      LOG(FATAL) << "GPU plugin exception: " << e.what() << std::endl;
+      //    }
     param.learning_rate = lr;
   }
 

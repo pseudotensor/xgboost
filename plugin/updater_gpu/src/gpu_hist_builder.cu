@@ -125,7 +125,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     // set dList member
     dList.resize(n_devices);
     for (int d_idx = 0; d_idx < n_devices; ++d_idx) {
-      int device_idx = param.gpu_id % dh::n_visible_devices() + d_idx % n_devices;
+      int device_idx = (param.gpu_id  + d_idx ) % dh::n_visible_devices();
       fprintf(stderr,"d_idx=%d device_idx=%d param.gpu_id=%d n_devices=%d\n",d_idx,device_idx,param.gpu_id,n_devices); fflush(stderr);
       dList[d_idx] = device_idx;
     }
