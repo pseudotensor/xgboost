@@ -126,6 +126,12 @@ inline std::string device_name(int device_idx) {
   return std::string(prop.name);
 }
 
+  // ensure gpu_id is correct, so not dependent upon user knowing details  
+inline int get_device_idx(int gpu_id){
+  // protect against overrun for gpu_id
+  return (std::abs(gpu_id) + 0 ) % dh::n_visible_devices();
+}
+
 
 /*
  *  Timers
