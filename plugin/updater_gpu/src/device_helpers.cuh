@@ -333,6 +333,7 @@ class dvec {
     _ptr = static_cast<T *>(ptr);
     _size = size;
     _device_idx = device_idx;
+    std::cout << "GODINSIDE: " << _device_idx << std::endl;
     safe_cuda(cudaSetDevice(_device_idx));
   }
 

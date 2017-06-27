@@ -121,7 +121,9 @@ inline void dense2sparse_tree(RegTree* p_tree,
                               thrust::device_ptr<Node> nodes_end,
                               const TrainParam& param) {
   RegTree& tree = *p_tree;
+  std::cout << "HEREA" << std::endl;
   thrust::host_vector<Node> h_nodes(nodes_begin, nodes_end);
+  std::cout << "HEREB" << std::endl;
   std::vector<NodeType> node_flags(h_nodes.size(), UNUSED);
   flag_nodes(h_nodes, &node_flags, 0, NODE);
 

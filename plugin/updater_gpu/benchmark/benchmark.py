@@ -18,7 +18,7 @@ def run_benchmark(args, gpu_algorithm, cpu_algorithm):
              'max_depth': 6,
              'silent': 1,
              'n_gpus': 1,
-             'gpu_id': 0,
+             'gpu_id': 1,
              'eval_metric': 'auc'}
 
     param['updater'] = gpu_algorithm
