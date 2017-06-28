@@ -141,7 +141,7 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
 
   
   std::cout << "HERE5b" << std::endl;
-  if (!initialised) {
+  if (1||!initialised) {
     // set dList member
     dList.resize(n_devices);
     for (int d_idx = 0; d_idx < n_devices; ++d_idx) {
@@ -150,55 +150,11 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
       dList[d_idx] = device_idx;
     }
 
-  std::cout << "HERE5c" << std::endl;
-#if (NCCL)
-    // initialize nccl
+    std::cout << "HERE5c" << std::endl;
 
-    comms.resize(n_devices);
-    streams.resize(n_devices);
-    dh::safe_nccl(ncclCommInitAll(comms.data(), n_devices,
-                                  dList.data()));  // initialize communicator
-                                                   // (One communicator per
-                                                   // process)
-
-    // printf("# NCCL: Using devices\n");
-    for (int d_idx = 0; d_idx < n_devices; ++d_idx) {
-      streams[d_idx] = reinterpret_cast<cudaStream_t*>(malloc(sizeof(cudaStream_t)));
-      dh::safe_cuda(cudaSetDevice(dList[d_idx]));
-      dh::safe_cuda(cudaStreamCreate(streams[d_idx]));
-
-      int cudaDev;
-      int rank;
-      cudaDeviceProp prop;
-      dh::safe_nccl(ncclCommCuDevice(comms[d_idx], &cudaDev));
-      dh::safe_nccl(ncclCommUserRank(comms[d_idx], &rank));
-      dh::safe_cuda(cudaGetDeviceProperties(&prop, cudaDev));
-      // printf("#   Rank %2d uses device %2d [0x%02x] %s\n", rank, cudaDev,
-      //             prop.pciBusID, prop.name);
-      fflush(stdout);
-    }
-
-    // local find_split group of comms for each case of reduced number of GPUs
-    // to use
-    find_split_comms.resize(
-        n_devices, std::vector<ncclComm_t>(n_devices));  // TODO(JCM): Excessive, but
-                                                         // ok, and best to do
-                                                         // here instead of
-                                                         // repeatedly
-    for (int num_d = 1; num_d <= n_devices;
-         ++num_d) {  // loop over number of devices used
-      dh::safe_nccl(ncclCommInitAll(find_split_comms[num_d - 1].data(), num_d,
-                                    dList.data()));  // initialize communicator
-                                                     // (One communicator per
-                                                     // process)
-    }
-
-  std::cout << "HERE5c" << std::endl;
-#endif
-
-    CHECK(fmat.SingleColBlock()) << "grow_gpu_hist: must have single column "
-                                    "block. Try setting 'tree_method' "
-                                    "parameter to 'exact'";
+    //    CHECK(fmat.SingleColBlock()) << "grow_gpu_hist: must have single column "
+    //                                    "block. Try setting 'tree_method' "
+    //                                    "parameter to 'exact'";
     /*
     is_dense = info->num_nonzero == info->num_col * info->num_row;
     hmat_.Init(&fmat, param.max_bin);
@@ -1143,7 +1099,7 @@ bool GPUHistBuilder::UpdatePredictionCache(
 void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
                             DMatrix* p_fmat, RegTree* p_tree) {
   this->InitData(gpair, *p_fmat, *p_tree);
-  int master_device = dList[0];
+  int master_device = 0;
   std::cout << "GOD0: " << master_device << " " << nodes[master_device].device_idx() << std::endl;
   this->InitFirstNode(gpair);
   this->ColSampleTree();
