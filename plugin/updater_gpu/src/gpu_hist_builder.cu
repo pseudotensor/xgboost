@@ -19,20 +19,28 @@ namespace tree {
 
 void DeviceGMat::Init(int device_idx, const common::GHistIndexMatrix& gmat,
                       bst_uint begin, bst_uint end) {
-  std::cout << "HERE1" << std::endl;
+  std::cout << "HERE1a" << std::endl;
   dh::safe_cuda(cudaSetDevice(device_idx));
+  std::cout << "HERE1b" << std::endl;
   CHECK_EQ(gidx.size(), end - begin) << "gidx must be externally allocated";
+  std::cout << "HERE1c" << std::endl;
   CHECK_EQ(ridx.size(), end - begin) << "ridx must be externally allocated";
+  std::cout << "HERE1d" << std::endl;
 
   thrust::copy(&gmat.index[begin], &gmat.index[end], gidx.tbegin());
+  std::cout << "HERE1e" << std::endl;
   thrust::device_vector<int> row_ptr = gmat.row_ptr;
+  std::cout << "HERE1f" << std::endl;
 
   auto counting = thrust::make_counting_iterator(begin);
+  std::cout << "HERE1g" << std::endl;
   thrust::upper_bound(row_ptr.begin(), row_ptr.end(), counting,
                       counting + gidx.size(), ridx.tbegin());
+  std::cout << "HERE1h" << std::endl;
   thrust::transform(ridx.tbegin(), ridx.tend(), ridx.tbegin(),
                     [=] __device__(int val) { return val - 1; });
-  std::cout << "HERE1b" << std::endl;
+  std::cout << "HERE1i" << std::endl;
+  std::cout << "HERE1j" << std::endl;
 }
 
 void DeviceHist::Init(int n_bins_in) {
@@ -127,10 +135,11 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
                               const RegTree& tree) {
   std::cout << "HERE5" << std::endl;
   // set member num_rows and n_devices for rest of GPUHistBuilder members
-  info = &fmat.info();
-  num_rows = info->num_row;
-  n_devices = dh::n_devices(param.n_gpus, num_rows);
+  //  info = &fmat.info();
+  //  num_rows = info->num_row;
+  n_devices = param.n_gpus;
 
+  
   std::cout << "HERE5b" << std::endl;
   if (!initialised) {
     // set dList member
@@ -190,13 +199,16 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     CHECK(fmat.SingleColBlock()) << "grow_gpu_hist: must have single column "
                                     "block. Try setting 'tree_method' "
                                     "parameter to 'exact'";
+    /*
     is_dense = info->num_nonzero == info->num_col * info->num_row;
     hmat_.Init(&fmat, param.max_bin);
     gmat_.cut = &hmat_;
     gmat_.Init(&fmat);
     int n_bins = hmat_.row_ptr.back();
     int n_features = hmat_.row_ptr.size() - 1;
-
+    */
+    
+    /*
     std::cout << "HERE5d" << std::endl;
     // deliniate data onto multiple gpus
     device_row_segments.push_back(0);
@@ -210,7 +222,8 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
       device_row_segments.push_back(offset);
       device_element_segments.push_back(gmat_.row_ptr[offset]);
     }
-
+    */
+    /*
     // Build feature segments
     std::vector<int> h_feature_segments;
     for (int node = 0; node < n_nodes_level(param.max_depth - 1); node++) {
@@ -230,36 +243,36 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     }
 
     int level_max_bins = n_nodes_level(param.max_depth - 1) * n_bins;
-
+    */
     // allocate unique common data that reside on master device (NOTE: None
     // currently)
     //    int master_device=dList[0];
     //    ba.allocate(master_device, );
 
     // allocate vectors across all devices
-    hist_vec.resize(n_devices);
+    //    hist_vec.resize(n_devices);
     nodes.resize(n_devices);
-    nodes_temp.resize(n_devices);
-    nodes_child_temp.resize(n_devices);
-    left_child_smallest.resize(n_devices);
-    left_child_smallest_temp.resize(n_devices);
-    feature_flags.resize(n_devices);
-    fidx_min_map.resize(n_devices);
-    feature_segments.resize(n_devices);
-    prediction_cache.resize(n_devices);
-    position.resize(n_devices);
-    position_tmp.resize(n_devices);
-    device_matrix.resize(n_devices);
-    device_gpair.resize(n_devices);
-    gidx_feature_map.resize(n_devices);
-    gidx_fvalue_map.resize(n_devices);
+    //    nodes_temp.resize(n_devices);
+    //    nodes_child_temp.resize(n_devices);
+    //    left_child_smallest.resize(n_devices);
+    //    left_child_smallest_temp.resize(n_devices);
+    //    feature_flags.resize(n_devices);
+    //    fidx_min_map.resize(n_devices);
+    //    feature_segments.resize(n_devices);
+    //    prediction_cache.resize(n_devices);
+    //    position.resize(n_devices);
+    //    position_tmp.resize(n_devices);
+    //    device_matrix.resize(n_devices);
+    //    device_gpair.resize(n_devices);
+    //    gidx_feature_map.resize(n_devices);
+    //    gidx_fvalue_map.resize(n_devices);
 
   std::cout << "HERE5f" << std::endl;
-    int find_split_n_devices = std::pow(2, std::floor(std::log2(n_devices)));
-    find_split_n_devices =
-        std::min(n_nodes_level(param.max_depth), find_split_n_devices);
-    int max_num_nodes_device =
-        n_nodes_level(param.max_depth) / find_split_n_devices;
+  //    int find_split_n_devices = std::pow(2, std::floor(std::log2(n_devices)));
+  //    find_split_n_devices =
+  //        std::min(n_nodes_level(param.max_depth), find_split_n_devices);
+    //    int max_num_nodes_device =
+    //        n_nodes_level(param.max_depth) / find_split_n_devices;
 
     // num_rows_segment: for sharding rows onto gpus for splitting data
     // num_elements_segment: for sharding rows (of elements) onto gpus for
@@ -270,10 +283,12 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
     for (int d_idx = 0; d_idx < n_devices; d_idx++) {
       int device_idx = dList[d_idx];
       std::cout << "d_idx device_idx : " << d_idx << " " << device_idx << std::endl;
-      bst_uint num_rows_segment =
-          device_row_segments[d_idx + 1] - device_row_segments[d_idx];
-      bst_uint num_elements_segment =
-          device_element_segments[d_idx + 1] - device_element_segments[d_idx];
+      //      bst_uint num_rows_segment =
+      //          device_row_segments[d_idx + 1] - device_row_segments[d_idx];
+      //      bst_uint num_elements_segment =
+      //          device_element_segments[d_idx + 1] - device_element_segments[d_idx];
+      ba.allocate(device_idx, &nodes[d_idx], n_nodes(param.max_depth));  // constant and same on all devices
+      /*
       ba.allocate(
           device_idx, &(hist_vec[d_idx].data),
           n_nodes(param.max_depth - 1) * n_bins, &nodes[d_idx],
@@ -296,25 +311,25 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
           &gidx_feature_map[d_idx], n_bins,  // constant and same on all devices
           &gidx_fvalue_map[d_idx],
           hmat_.cut.size());  // constant and same on all devices
-
+      */
       int master_device=0;
       std::cout << "GODQ: " << master_device << " " << nodes[master_device].device_idx() << std::endl;
 
       
       // Copy Host to Device (assumes comes after ba.allocate that sets device)
-      device_matrix[d_idx].Init(device_idx, gmat_,
-                                device_element_segments[d_idx],
-                                device_element_segments[d_idx + 1]);
-      gidx_feature_map[d_idx] = h_gidx_feature_map;
-      gidx_fvalue_map[d_idx] = hmat_.cut;
-      feature_segments[d_idx] = h_feature_segments;
-      fidx_min_map[d_idx] = hmat_.min_val;
+      //      device_matrix[d_idx].Init(device_idx, gmat_,
+      //                                device_element_segments[d_idx],
+      //                                device_element_segments[d_idx + 1]);
+      //      gidx_feature_map[d_idx] = h_gidx_feature_map;
+      //      gidx_fvalue_map[d_idx] = hmat_.cut;
+      //      feature_segments[d_idx] = h_feature_segments;
+      //      fidx_min_map[d_idx] = hmat_.min_val;
 
       // Initialize, no copy
-      hist_vec[d_idx].Init(n_bins);     // init host object
-      prediction_cache[d_idx].fill(0);  // init device object (assumes comes
+      //      hist_vec[d_idx].Init(n_bins);     // init host object
+      //      prediction_cache[d_idx].fill(0);  // init device object (assumes comes
                                         // after ba.allocate that sets device)
-      feature_flags[d_idx].fill(1);  // init device object (assumes comes after
+      //      feature_flags[d_idx].fill(1);  // init device object (assumes comes after
                                      // ba.allocate that sets device)
     }
 
@@ -332,34 +347,34 @@ void GPUHistBuilder::InitData(const std::vector<bst_gpair>& gpair,
 
   std::cout << "HERE5g" << std::endl;
   // copy or init to do every iteration
-  for (int d_idx = 0; d_idx < n_devices; d_idx++) {
-    int device_idx = dList[d_idx];
-    dh::safe_cuda(cudaSetDevice(device_idx));
+  //  for (int d_idx = 0; d_idx < n_devices; d_idx++) {
+  //    int device_idx = dList[d_idx];
+  //    dh::safe_cuda(cudaSetDevice(device_idx));
 
-    nodes[d_idx].fill(Node());
-    nodes_temp[d_idx].fill(Node());
-    nodes_child_temp[d_idx].fill(Node());
+    //    nodes[d_idx].fill(Node());
+    //    nodes_temp[d_idx].fill(Node());
+    //    nodes_child_temp[d_idx].fill(Node());
 
-    position[d_idx].fill(0);
+    //    position[d_idx].fill(0);
 
-    device_gpair[d_idx].copy(gpair.begin() + device_row_segments[d_idx],
-                             gpair.begin() + device_row_segments[d_idx + 1]);
+    //    device_gpair[d_idx].copy(gpair.begin() + device_row_segments[d_idx],
+    //                             gpair.begin() + device_row_segments[d_idx + 1]);
 
-    subsample_gpair(&device_gpair[d_idx], param.subsample,
-                    device_row_segments[d_idx]);
+    //    subsample_gpair(&device_gpair[d_idx], param.subsample,
+    //                    device_row_segments[d_idx]);
 
-    hist_vec[d_idx].Reset(device_idx);
+    //    hist_vec[d_idx].Reset(device_idx);
 
     // left_child_smallest and left_child_smallest_temp don't need to be
     // initialized
-  }
+  //  }
 
   int master_device=0;
   std::cout << "GODAA: " << master_device << " " << nodes[master_device].device_idx() << std::endl;
   std::cout << "HERE5h" << std::endl;
-  dh::synchronize_n_devices(n_devices, dList);
+  //  dh::synchronize_n_devices(n_devices, dList);
 
-  p_last_fmat_ = &fmat;
+  //  p_last_fmat_ = &fmat;
   std::cout << "GODBB: " << master_device << " " << nodes[master_device].device_idx() << std::endl;
   std::cout << "HERE5i" << std::endl;
 }
