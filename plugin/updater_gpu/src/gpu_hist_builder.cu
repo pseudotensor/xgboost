@@ -1102,6 +1102,8 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
   this->InitFirstNode(gpair);
   this->ColSampleTree();
   long long int elapsed=0;
+  static long long int elapsedall2=0;
+  dh::Timer timeall2;
   for (int depth = 0; depth < param.max_depth; depth++) {
     this->ColSampleLevel();
 
@@ -1127,6 +1129,8 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
   dense2sparse_tree(p_tree, nodes[0].tbegin(), nodes[0].tend(), param);
   elapsedall += timeall.elapsed();
   printf("Total All Time %lld\n",elapsedall);
+  elapsedall2 += timeall2.elapsed();
+  printf("Total All Time2 %lld\n",elapsedall2);
 }
 }  // namespace tree
 }  // namespace xgboost
