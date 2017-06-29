@@ -1128,9 +1128,9 @@ void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
   dh::safe_cuda(cudaSetDevice(master_device));
   dense2sparse_tree(p_tree, nodes[0].tbegin(), nodes[0].tend(), param);
   elapsedall += timeall.elapsed();
-  printf("Total All Time %lld\n",elapsedall);
+  printf("Total Training Time(s) (i.e. timing starts as soon as inside any GPU code, but includes lots of CPU activity) %g\n",elapsedall/1.0E9);
   elapsedall2 += timeall2.elapsed();
-  printf("Total All Time2 %lld\n",elapsedall2);
+  printf("Total Iteration Time(s) (i.e. after all initial CPU activity, but during CPU-GPU intermixed activity) %g\n",elapsedall2/1.0E9);
 }
 }  // namespace tree
 }  // namespace xgboost
