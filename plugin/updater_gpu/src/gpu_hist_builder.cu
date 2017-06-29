@@ -1095,33 +1095,38 @@ bool GPUHistBuilder::UpdatePredictionCache(
 
 void GPUHistBuilder::Update(const std::vector<bst_gpair>& gpair,
                             DMatrix* p_fmat, RegTree* p_tree) {
+  static long long int elapsedall=0;
+  dh::Timer timeall;
+  
   this->InitData(gpair, *p_fmat, *p_tree);
   this->InitFirstNode(gpair);
   this->ColSampleTree();
-  //  long long int elapsed=0;
+  long long int elapsed=0;
   for (int depth = 0; depth < param.max_depth; depth++) {
     this->ColSampleLevel();
 
-    //    dh::Timer time;
+    dh::Timer time;
     this->BuildHist(depth);
-    //    elapsed+=time.elapsed();
-    //    printf("depth=%d\n",depth);
-    //    time.printElapsed("BH Time");
+        elapsed+=time.elapsed();
+        printf("depth=%d\n",depth);
+        time.printElapsed("BH Time");
 
-    //    dh::Timer timesplit;
+        dh::Timer timesplit;
     this->FindSplit(depth);
-    //    timesplit.printElapsed("FS Time");
+        timesplit.printElapsed("FS Time");
 
-    //    dh::Timer timeupdatepos;
+        dh::Timer timeupdatepos;
     this->UpdatePosition(depth);
-    //    timeupdatepos.printElapsed("UP Time");
+        timeupdatepos.printElapsed("UP Time");
   }
-  //  printf("Total BuildHist Time=%lld\n",elapsed);
+  printf("Total BuildHist Time=%lld\n",elapsed);
 
   // done with multi-GPU, pass back result from master to tree on host
   int master_device = dList[0];
   dh::safe_cuda(cudaSetDevice(master_device));
   dense2sparse_tree(p_tree, nodes[0].tbegin(), nodes[0].tend(), param);
+  elapsedall += timeall.elapsed();
+  printf("Total All Time %lld\n",elapsedall);
 }
 }  // namespace tree
 }  // namespace xgboost

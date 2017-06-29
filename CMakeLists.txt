@@ -124,7 +124,7 @@ if(PLUGIN_UPDATER_GPU)
   include_directories(${GTEST_DIRECTORY}/include)
 
   #gencode flags
-  set(GPU_COMPUTE_VER 50;52;60;61 CACHE STRING
+  set(GPU_COMPUTE_VER 35;50;52;60;61 CACHE STRING
     "Space separated list of compute versions to be built against")
   
   set(GENCODE_FLAGS "")
