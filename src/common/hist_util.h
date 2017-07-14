@@ -104,7 +104,7 @@ struct GHistIndexRow {
  */
 struct GHistIndexMatrix {
   /*! \brief row pointer */
-  std::vector<unsigned> row_ptr;
+  std::vector<size_t> row_ptr;
   /*! \brief The index data */
   std::vector<unsigned> index;
   /*! \brief hit count of each index */
