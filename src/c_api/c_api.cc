@@ -351,6 +351,8 @@ XGB_DLL int XGDMatrixCreateFromMat(const bst_float* data,
 
   API_BEGIN();
   data::SimpleCSRSource& mat = *source;
+  mat.row_data_.reserve(std::ceil(nrow*ncol));
+  mat.row_ptr_.reserve(std::ceil(nrow));
   bool nan_missing = common::CheckNAN(missing);
   mat.info.num_row = nrow;
   mat.info.num_col = ncol;
@@ -375,6 +377,15 @@ XGB_DLL int XGDMatrixCreateFromMat(const bst_float* data,
 }
 
 
+#include <sys/time.h>
+
+long long current_timestamp() {
+  struct timeval te;
+  gettimeofday(&te, NULL); // get current time
+  long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // caculate milliseconds
+  // printf("milliseconds: %lld\n", milliseconds);
+  return milliseconds;
+}
 
 XGB_DLL int XGDMatrixCreateFromMat_omp(const bst_float* data,
                                        xgboost::bst_ulong nrow,
@@ -382,16 +393,21 @@ XGB_DLL int XGDMatrixCreateFromMat_omp(const bst_float* data,
                                        bst_float missing,
                                        DMatrixHandle* out,
                                        int nthread) {
+
+  long long T0;
+  fprintf(stderr,"T0: %lld\n",T0=current_timestamp()); fflush(stderr);
+  
   std::unique_ptr<data::SimpleCSRSource> source(new data::SimpleCSRSource());
 
   API_BEGIN();
   const int nthreadmax = omp_get_max_threads();
-  if(nthread<=0) nthread=nthreadmax;
+  if (nthread <= 0) nthread=nthreadmax;
   data::SimpleCSRSource& mat = *source;
   bool nan_missing = common::CheckNAN(missing);
   mat.info.num_row = nrow;
   mat.info.num_col = ncol;
 
+  fprintf(stderr,"T1: %lld\n",current_timestamp()-T0); fflush(stderr);
   size_t *prefix1;
   size_t *prefix2;
   xgboost::bst_ulong *end_row_ptr;
@@ -408,12 +424,13 @@ XGB_DLL int XGDMatrixCreateFromMat_omp(const bst_float* data,
       end_row_ptr[0] = 0;
     }
 #pragma omp barrier
-    
     std::unique_ptr<data::SimpleCSRSource> source_private(new data::SimpleCSRSource());
     data::SimpleCSRSource& mat_private = *source_private;
-    
+    xgboost::bst_ulong nrow_reserve_per_thread = std::ceil(nrow/(double)nthread);
+    mat_private.row_data_.reserve(nrow_reserve_per_thread*ncol);
+    mat_private.row_ptr_.reserve(nrow_reserve_per_thread);
 #pragma omp for schedule(static)
-    for (xgboost::bst_ulong i = 0; i < nrow; ++i) {
+    for (omp_ulong i = 0; i < nrow; ++i) {
       xgboost::bst_ulong nelem = 0;
       for (xgboost::bst_ulong j = 0; j < ncol; ++j) {
         if (common::CheckNAN(data[ncol*i + j])) {
@@ -426,7 +443,6 @@ XGB_DLL int XGDMatrixCreateFromMat_omp(const bst_float* data,
           }
         }
       }
-      //mat_private.row_ptr_.push_back(nelem);
       mat_private.row_ptr_.push_back(mat_private.row_ptr_.back() + nelem);
     }
     prefix1[ithread+1] = mat_private.row_data_.size();
@@ -437,7 +453,8 @@ XGB_DLL int XGDMatrixCreateFromMat_omp(const bst_float* data,
 #pragma omp barrier
 #pragma omp single
     {
-      for(int i=1; i<(nthread+1); i++){
+      fprintf(stderr,"T2: %lld\n",current_timestamp()-T0); fflush(stderr);
+      for (int i = 1; i < (nthread+1); i++) {
         prefix1[i] += prefix1[i-1];
         prefix2[i] += prefix2[i-1];
         end_row_ptr[i] += end_row_ptr[i-1];
@@ -447,20 +464,31 @@ XGB_DLL int XGDMatrixCreateFromMat_omp(const bst_float* data,
     }
 
     // add offset for partial sum
-    transform(mat_private.row_ptr_.begin(), mat_private.row_ptr_.end(), mat_private.row_ptr_.begin(), bind2nd(std::plus<xgboost::bst_ulong>(), end_row_ptr[ithread]));
+    transform(mat_private.row_ptr_.begin(), mat_private.row_ptr_.end(),
+              mat_private.row_ptr_.begin(),
+              bind2nd(std::plus<xgboost::bst_ulong>(), end_row_ptr[ithread]));
     
+#pragma omp single
+    {
+    fprintf(stderr,"T3: %lld\n",current_timestamp()-T0); fflush(stderr);
+    }
     // merge results
-    std::copy(mat_private.row_data_.begin(), mat_private.row_data_.end(), mat.row_data_.begin() + prefix1[ithread]);
-    std::copy(mat_private.row_ptr_.begin()+1, mat_private.row_ptr_.end(), mat.row_ptr_.begin()+1 + prefix2[ithread]);
-
+    std::copy(mat_private.row_data_.begin(), mat_private.row_data_.end(),
+              mat.row_data_.begin() + prefix1[ithread]);
+    std::copy(mat_private.row_ptr_.begin()+1, mat_private.row_ptr_.end(),
+              mat.row_ptr_.begin()+1 + prefix2[ithread]);
   }
 
+  fprintf(stderr,"T4: %lld\n",current_timestamp()-T0); fflush(stderr);
   delete [] prefix1;
   delete [] prefix2;
   delete [] end_row_ptr;
-  
+
   mat.info.num_nonzero = mat.row_data_.size();
+  fprintf(stderr,"Before *out\n"); fflush(stderr);
   *out  = new std::shared_ptr<DMatrix>(DMatrix::Create(std::move(source)));
+  fprintf(stderr,"After *out\n"); fflush(stderr);
+  fprintf(stderr,"T5: %lld\n",current_timestamp()-T0); fflush(stderr);
   API_END();
 }
 
@@ -532,10 +560,12 @@ XGB_DLL int XGDMatrixSetFloatInfo(DMatrixHandle handle,
                           const char* field,
                           const bst_float* info,
                           xgboost::bst_ulong len) {
+  fprintf(stderr,"Start XGDMatrixSetFloatInfo\n"); fflush(stderr);
   API_BEGIN();
   static_cast<std::shared_ptr<DMatrix>*>(handle)
       ->get()->info().SetInfo(field, info, kFloat32, len);
   API_END();
+  fprintf(stderr,"End XGDMatrixSetFloatInfo\n"); fflush(stderr);
 }
 
 XGB_DLL int XGDMatrixSetUIntInfo(DMatrixHandle handle,

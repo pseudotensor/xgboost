@@ -269,7 +269,9 @@ class DMatrix(object):
         elif isinstance(data, scipy.sparse.csc_matrix):
             self._init_from_csc(data)
         elif isinstance(data, np.ndarray):
+            print("Before init_from_npy2d") ; sys.stdout.flush()
             self._init_from_npy2d(data, missing, nthread)
+            print("After init_from_npy2d") ; sys.stdout.flush()
         else:
             try:
                 csr = scipy.sparse.csr_matrix(data)
@@ -277,8 +279,10 @@ class DMatrix(object):
             except:
                 raise TypeError('can not initialize DMatrix from {}'.format(type(data).__name__))
         if label is not None:
+            print("Before set_label") ; sys.stdout.flush()
             self.set_label(label)
         if weight is not None:
+            print("Before set_weight") ; sys.stdout.flush()
             self.set_weight(weight)
 
         self.feature_names = feature_names
@@ -406,6 +410,7 @@ class DMatrix(object):
         data: numpy array
             The array of data to be set
         """
+        print("Before XGDMatrixSetFloatInfo") ; sys.stdout.flush()
         _check_call(_LIB.XGDMatrixSetFloatInfo(self.handle,
                                                c_str(field),
                                                c_array(ctypes.c_float, data),
