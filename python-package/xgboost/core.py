@@ -224,7 +224,8 @@ class DMatrix(object):
 
     def __init__(self, data, label=None, missing=None,
                  weight=None, silent=False,
-                 feature_names=None, feature_types=None):
+                 feature_names=None, feature_types=None,
+                 nthread=None):
         """
         Data matrix used in XGBoost.
 
@@ -268,7 +269,7 @@ class DMatrix(object):
         elif isinstance(data, scipy.sparse.csc_matrix):
             self._init_from_csc(data)
         elif isinstance(data, np.ndarray):
-            self._init_from_npy2d(data, missing)
+            self._init_from_npy2d(data, missing, nthread)
         else:
             try:
                 csr = scipy.sparse.csr_matrix(data)
@@ -313,7 +314,7 @@ class DMatrix(object):
                                                   ctypes.c_size_t(csc.shape[0]),
                                                   ctypes.byref(self.handle)))
 
-    def _init_from_npy2d(self, mat, missing):
+    def _init_from_npy2d(self, mat, missing, nthread):
         """
         Initialize data from a 2-D numpy matrix.
 
@@ -333,11 +334,21 @@ class DMatrix(object):
         data = np.array(mat.reshape(mat.size), copy=False, dtype=np.float32)
         self.handle = ctypes.c_void_p()
         missing = missing if missing is not None else np.nan
-        _check_call(_LIB.XGDMatrixCreateFromMat(data.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-                                                c_bst_ulong(mat.shape[0]),
-                                                c_bst_ulong(mat.shape[1]),
-                                                ctypes.c_float(missing),
-                                                ctypes.byref(self.handle)))
+        if nthread is None:
+            _check_call(_LIB.XGDMatrixCreateFromMat(
+                data.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                c_bst_ulong(mat.shape[0]),
+                c_bst_ulong(mat.shape[1]),
+                ctypes.c_float(missing),
+                ctypes.byref(self.handle)))
+        else:
+            _check_call(_LIB.XGDMatrixCreateFromMat_omp(
+                data.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                c_bst_ulong(mat.shape[0]),
+                c_bst_ulong(mat.shape[1]),
+                ctypes.c_float(missing),
+                ctypes.byref(self.handle),
+                nthread))
 
     def __del__(self):
         _check_call(_LIB.XGDMatrixFree(self.handle))

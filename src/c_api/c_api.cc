@@ -290,6 +290,7 @@ XGB_DLL int XGDMatrixCreateFromCSCEx(const size_t* col_ptr,
   std::unique_ptr<data::SimpleCSRSource> source(new data::SimpleCSRSource());
 
   API_BEGIN();
+  // FIXME: User should be able to control number of threads
   const int nthread = omp_get_max_threads();
   data::SimpleCSRSource& mat = *source;
   common::ParallelGroupBuilder<RowBatch::Entry> builder(&mat.row_ptr_, &mat.row_data_);
@@ -358,7 +359,7 @@ XGB_DLL int XGDMatrixCreateFromMat(const bst_float* data,
     for (xgboost::bst_ulong j = 0; j < ncol; ++j) {
       if (common::CheckNAN(data[j])) {
         CHECK(nan_missing)
-            << "There are NAN in the matrix, however, you did not set missing=NAN";
+          << "There are NAN in the matrix, however, you did not set missing=NAN";
       } else {
         if (nan_missing || data[j] != missing) {
           mat.row_data_.push_back(RowBatch::Entry(j, data[j]));
@@ -368,6 +369,96 @@ XGB_DLL int XGDMatrixCreateFromMat(const bst_float* data,
     }
     mat.row_ptr_.push_back(mat.row_ptr_.back() + nelem);
   }
+  mat.info.num_nonzero = mat.row_data_.size();
+  *out  = new std::shared_ptr<DMatrix>(DMatrix::Create(std::move(source)));
+  API_END();
+}
+
+
+
+XGB_DLL int XGDMatrixCreateFromMat_omp(const bst_float* data,
+                                       xgboost::bst_ulong nrow,
+                                       xgboost::bst_ulong ncol,
+                                       bst_float missing,
+                                       DMatrixHandle* out,
+                                       int nthread) {
+  std::unique_ptr<data::SimpleCSRSource> source(new data::SimpleCSRSource());
+
+  API_BEGIN();
+  const int nthreadmax = omp_get_max_threads();
+  if(nthread<=0) nthread=nthreadmax;
+  data::SimpleCSRSource& mat = *source;
+  bool nan_missing = common::CheckNAN(missing);
+  mat.info.num_row = nrow;
+  mat.info.num_col = ncol;
+
+  size_t *prefix1;
+  size_t *prefix2;
+  xgboost::bst_ulong *end_row_ptr;
+#pragma omp parallel num_threads(nthread)
+  {
+    int ithread  = omp_get_thread_num();
+#pragma omp single
+    {
+      prefix1 = new size_t[nthread+1];
+      prefix2 = new size_t[nthread+1];
+      prefix1[0] = 0;
+      prefix2[0] = 0;
+      end_row_ptr = new xgboost::bst_ulong[nthread+1];
+      end_row_ptr[0] = 0;
+    }
+#pragma omp barrier
+    
+    std::unique_ptr<data::SimpleCSRSource> source_private(new data::SimpleCSRSource());
+    data::SimpleCSRSource& mat_private = *source_private;
+    
+#pragma omp for schedule(static)
+    for (xgboost::bst_ulong i = 0; i < nrow; ++i) {
+      xgboost::bst_ulong nelem = 0;
+      for (xgboost::bst_ulong j = 0; j < ncol; ++j) {
+        if (common::CheckNAN(data[ncol*i + j])) {
+          CHECK(nan_missing)
+            << "There are NAN in the matrix, however, you did not set missing=NAN";
+        } else {
+          if (nan_missing || data[ncol*i + j] != missing) {
+            mat_private.row_data_.push_back(RowBatch::Entry(j, data[ncol*i + j]));
+            ++nelem;
+          }
+        }
+      }
+      //mat_private.row_ptr_.push_back(nelem);
+      mat_private.row_ptr_.push_back(mat_private.row_ptr_.back() + nelem);
+    }
+    prefix1[ithread+1] = mat_private.row_data_.size();
+    prefix2[ithread+1] = mat_private.row_ptr_.size()-1;
+    end_row_ptr[ithread+1] = mat_private.row_ptr_.back();
+
+    // aquire each prefix and each offset for partial sum
+#pragma omp barrier
+#pragma omp single
+    {
+      for(int i=1; i<(nthread+1); i++){
+        prefix1[i] += prefix1[i-1];
+        prefix2[i] += prefix2[i-1];
+        end_row_ptr[i] += end_row_ptr[i-1];
+      }
+      mat.row_data_.resize(mat.row_data_.size() + prefix1[nthread]);
+      mat.row_ptr_.resize(mat.row_ptr_.size() + prefix2[nthread]);
+    }
+
+    // add offset for partial sum
+    transform(mat_private.row_ptr_.begin(), mat_private.row_ptr_.end(), mat_private.row_ptr_.begin(), bind2nd(std::plus<xgboost::bst_ulong>(), end_row_ptr[ithread]));
+    
+    // merge results
+    std::copy(mat_private.row_data_.begin(), mat_private.row_data_.end(), mat.row_data_.begin() + prefix1[ithread]);
+    std::copy(mat_private.row_ptr_.begin()+1, mat_private.row_ptr_.end(), mat.row_ptr_.begin()+1 + prefix2[ithread]);
+
+  }
+
+  delete [] prefix1;
+  delete [] prefix2;
+  delete [] end_row_ptr;
+  
   mat.info.num_nonzero = mat.row_data_.size();
   *out  = new std::shared_ptr<DMatrix>(DMatrix::Create(std::move(source)));
   API_END();
